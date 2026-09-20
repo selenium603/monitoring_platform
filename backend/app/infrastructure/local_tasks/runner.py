@@ -130,8 +130,22 @@ class LocalTaskRunner:
             )
 
     async def _handle_timeout(self, job: LocalJobModel, message: str) -> None:
+        definition = TASK_DEFINITIONS[job.task_name]
+
         if job.task_name in {"execute_eval_run", "execute_session_eval_run"}:
             await self._fail_eval_run(job, message)
+
+        if definition.retry_on_timeout and job.attempts <= job.max_retries:
+            available_at = datetime.now(timezone.utc) + timedelta(seconds=job.retry_delay_seconds)
+            await self._schedule_retry(job.id, available_at=available_at, error=message)
+            logger.warning(
+                "local_job_timeout_retry_scheduled",
+                job_id=str(job.id),
+                task_name=job.task_name,
+                attempt=job.attempts,
+            )
+            return
+
         await self._mark_failed(job.id, message)
         logger.error("local_job_timeout", job_id=str(job.id), task_name=job.task_name, error=message)
 
