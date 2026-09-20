@@ -186,6 +186,25 @@ class APIKeyModel(Base):
     organization: Mapped["OrganizationModel"] = relationship(back_populates="api_keys")
 
 
+class CliAuthCodeModel(Base):
+    """Short-lived, single-use CLI PKCE authorization code binding."""
+
+    __tablename__ = "cli_auth_codes"
+
+    code_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"))
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"))
+    project_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    code_challenge: Mapped[str] = mapped_column(String(255), nullable=False)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    expires_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    __table_args__ = (Index("ix_cli_auth_codes_expires_at", "expires_at"),)
+
+
 # ---------------------------------------------------------------------------
 # Persistent local background jobs
 # ---------------------------------------------------------------------------

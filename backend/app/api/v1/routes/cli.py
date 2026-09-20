@@ -14,7 +14,6 @@ These paths are part of the CLI's compiled-in contract — do not rename.
 
 from uuid import UUID
 
-import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +22,6 @@ from app.api.context import ApiContext
 from app.api.dependencies import get_api_context
 from app.api.rate_limit import limiter
 from app.infrastructure.db.engine import get_db_session
-from app.infrastructure.redis.client import get_redis
 from app.registry.exceptions import AuthenticationError
 from app.services.analytics_service import AnalyticsService
 from app.services.cli_service import CliAuthService
@@ -87,18 +85,17 @@ async def issue_cli_code(
     body: IssueCodeRequest,
     ctx: ApiContext = Depends(get_api_context),
     session: AsyncSession = Depends(get_db_session),
-    redis_client: aioredis.Redis = Depends(get_redis),
 ) -> IssueCodeResponse:
     """Issue a short-lived, single-use authorization code for the CLI.
 
     Auth: `Bearer`
 
-    Binds the code to ``{user, org, project, code_challenge}`` in Redis
+    Binds the code to ``{user, org, project, code_challenge}`` in PostgreSQL
     with a ~120s TTL. **No API key is created here** — the key is minted
     only at exchange time.
     """
     _require_user(ctx)
-    svc = CliAuthService(redis_client, session)
+    svc = CliAuthService(session)
     code, expires_in = await svc.issue_code(
         user_id=ctx.user.id,
         org_id=body.org_id,
@@ -117,7 +114,6 @@ async def exchange_cli_code(
     request: Request,
     body: ExchangeRequest,
     session: AsyncSession = Depends(get_db_session),
-    redis_client: aioredis.Redis = Depends(get_redis),
 ) -> ExchangeResponse:
     """Exchange a single-use code + PKCE verifier for a 90-day API key.
 
@@ -127,7 +123,7 @@ async def exchange_cli_code(
     is verified with a constant-time compare. The raw key is returned
     exactly once. Rate limit: `20/min`.
     """
-    svc = CliAuthService(redis_client, session)
+    svc = CliAuthService(session)
     result = await svc.exchange(code=body.code, code_verifier=body.code_verifier)
     user_id = result.pop("user_id")
     AnalyticsService().api_key_created(org_id=result["org_id"], user_id=user_id)

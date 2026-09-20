@@ -1,57 +1,42 @@
 """Orchestration for the CLI OAuth2 Authorization Code + PKCE login flow.
 
 The ``pandaprobe auth login`` CLI obtains a 90-day data-plane API key
-without the raw key ever touching the browser:
+without the raw key ever touching the browser. Short-lived authorization
+codes are stored as hashes in PostgreSQL and consumed atomically.
 
-1. The web ``/cli-login`` page calls :meth:`CliAuthService.issue_code`
-   (authenticated as the Firebase user) to mint a single-use ``code``
-   bound to ``{user, org, project, code_challenge}`` and persisted in
-   Redis with a short TTL. **No API key is created here.**
-2. The CLI calls :meth:`CliAuthService.exchange` (no auth header — the
-   ``code`` + ``code_verifier`` is the proof). The code is consumed
-   atomically, the PKCE challenge is verified with a constant-time
-   compare, and only then is the 90-day key minted and returned once.
-
-Security: PKCE ``S256`` is mandatory, codes are single-use with a
-~120s TTL, and neither the ``code_verifier`` nor the raw key is ever
-logged.
+Security: PKCE ``S256`` is mandatory, codes are single-use with a ~120s TTL,
+and neither the ``code_verifier`` nor the raw key is ever logged.
 """
 
 import base64
 import hashlib
 import hmac
-import json
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.infrastructure.db.repositories.cli_auth_repo import CliAuthRepository
 from app.registry.exceptions import AuthenticationError, ValidationError
 from app.services.identity_service import IdentityService
 
-# Redis key namespace for single-use authorization codes.
-_CODE_PREFIX = "cli:authcode:"
-# Authorization code time-to-live, in seconds (single-use, short-lived).
 _CODE_TTL_SECONDS = 120
-# Bytes of entropy for the opaque authorization code (>= 32 per spec).
 _CODE_RANDOM_BYTES = 32
-# API key name column is String(255).
 _MAX_KEY_NAME_LEN = 255
-# The CLI is only permitted to mint a fixed 90-day key lifetime.
 _ALLOWED_EXPIRES_DAYS = 90
 
 
 def verify_pkce(verifier: str, challenge: str) -> bool:
-    """Return True iff ``BASE64URL(SHA256(verifier)) == challenge``.
-
-    Uses a constant-time comparison to avoid leaking timing information
-    about the stored challenge.
-    """
+    """Return True iff ``BASE64URL(SHA256(verifier)) == challenge``."""
     digest = hashlib.sha256(verifier.encode()).digest()
     computed = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
     return hmac.compare_digest(computed, challenge)
+
+
+def _hash_code(code: str) -> str:
+    """Hash an opaque code before it is persisted."""
+    return hashlib.sha256(code.encode()).hexdigest()
 
 
 def _key_name_from_label(label: str) -> str:
@@ -65,10 +50,9 @@ def _key_name_from_label(label: str) -> str:
 class CliAuthService:
     """Issue and exchange single-use CLI authorization codes."""
 
-    def __init__(self, redis_client: aioredis.Redis, session: AsyncSession) -> None:
-        """Initialise with an async Redis client and database session."""
-        self._redis = redis_client
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._codes = CliAuthRepository(session)
         self._identity = IdentityService(session)
 
     async def issue_code(
@@ -82,15 +66,7 @@ class CliAuthService:
         label: str,
         expires_days: int = 90,
     ) -> tuple[str, int]:
-        """Mint a single-use authorization code bound to the PKCE challenge.
-
-        Verifies the caller is a member of the org and that the project
-        belongs to it, then stores the binding in Redis with a short TTL.
-        Does **not** create an API key.
-
-        Returns:
-            A tuple of ``(code, expires_in_seconds)``.
-        """
+        """Mint a single-use authorization code bound to the PKCE challenge."""
         if code_challenge_method != "S256":
             raise ValidationError("Unsupported code_challenge_method. Only 'S256' is allowed.")
         if not code_challenge or not code_challenge.strip():
@@ -98,74 +74,54 @@ class CliAuthService:
         if expires_days != _ALLOWED_EXPIRES_DAYS:
             raise ValidationError(f"Only a {_ALLOWED_EXPIRES_DAYS}-day key lifetime is supported for the CLI.")
 
-        # Authorization: caller must belong to the org, and the project must be in it.
         await self._identity.require_membership(user_id, org_id)
         project = await self._identity.get_project(project_id, org_id=org_id)
 
         code = secrets.token_urlsafe(_CODE_RANDOM_BYTES)
-        payload = {
-            "user_id": str(user_id),
-            "org_id": str(org_id),
-            "project_id": str(project.id),
-            "project_name": project.name,
-            "code_challenge": code_challenge,
-            "label": label,
-            "expires_days": expires_days,
-        }
-        await self._redis.setex(f"{_CODE_PREFIX}{code}", _CODE_TTL_SECONDS, json.dumps(payload))
+        await self._codes.create(
+            code_hash=_hash_code(code),
+            user_id=user_id,
+            org_id=org_id,
+            project_id=project.id,
+            project_name=project.name,
+            code_challenge=code_challenge,
+            label=label,
+            expires_days=expires_days,
+            expires_at=datetime.now(timezone.utc) + timedelta(seconds=_CODE_TTL_SECONDS),
+        )
         return code, _CODE_TTL_SECONDS
 
     async def exchange(self, *, code: str, code_verifier: str) -> dict:
-        """Exchange a single-use code + PKCE verifier for a fresh 90-day API key.
-
-        The PKCE challenge is verified with a constant-time compare; the
-        code is consumed (single-use) only **after** a successful verify,
-        so a wrong verifier never burns a code the legitimate CLI still
-        needs. The raw key is returned exactly once and is never persisted
-        or logged.
-
-        Raises:
-            AuthenticationError: if the code is missing/expired/used, or
-                the verifier does not match the stored challenge.
-            AuthorizationError: if the user is no longer a member of the
-                org by the time the code is exchanged.
-        """
+        """Exchange a single-use code + PKCE verifier for a fresh API key."""
         if not code or not code_verifier:
             raise ValidationError("Both 'code' and 'code_verifier' are required.")
 
-        # Atomic single-use: fetch-and-delete so a replay finds nothing.
-        redis_key = f"{_CODE_PREFIX}{code}"
-        raw = await self._redis.get(redis_key)
-        if raw is None:
+        row = await self._codes.get_active(_hash_code(code))
+        if row is None:
             raise AuthenticationError("Authorization code is invalid, expired, or already used.")
 
-        payload = json.loads(raw)
-
-        if not verify_pkce(code_verifier, payload["code_challenge"]):
+        if not verify_pkce(code_verifier, row.code_challenge):
             raise AuthenticationError("PKCE verification failed.")
 
-        if await self._redis.delete(redis_key) == 0:
+        if not await self._codes.consume(row.code_hash):
             raise AuthenticationError("Authorization code is invalid, expired, or already used.")
+        await self._session.commit()
 
-        org_id = UUID(payload["org_id"])
-        user_id = UUID(payload["user_id"])
+        await self._identity.require_membership(row.user_id, row.org_id)
 
-        # Re-verify membership at exchange time
-        await self._identity.require_membership(user_id, org_id)
-
-        expiration = f"{int(payload['expires_days'])}d"
+        expiration = f"{row.expires_days}d"
         api_key, raw_key = await self._identity.create_api_key(
-            org_id=org_id,
-            name=_key_name_from_label(payload["label"]),
-            created_by=user_id,
+            org_id=row.org_id,
+            name=_key_name_from_label(row.label),
+            created_by=row.user_id,
             expiration=expiration,
         )
 
         return {
             "api_key": raw_key,
-            "project_name": payload["project_name"],
-            "org_id": str(org_id),
-            "user_id": str(user_id),
+            "project_name": row.project_name,
+            "org_id": str(row.org_id),
+            "user_id": str(row.user_id),
             "key_id": str(api_key.id),
             "key_prefix": api_key.key_prefix,
             "expires_at": api_key.expires_at.isoformat() if api_key.expires_at else None,

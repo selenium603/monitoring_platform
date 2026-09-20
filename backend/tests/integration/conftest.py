@@ -1,8 +1,8 @@
-"""Integration test fixtures: real database, Redis-backed CLI, and local task runner.
+"""Integration test fixtures: real database, Redis compatibility, and local task runner.
 
 The test stack mirrors dev/prod as closely as possible:
 - **PostgreSQL** on port 5433 (``docker-compose.test.yml``)
-- **Redis** on port 6380 for the remaining CLI auth and Celery compatibility paths
+- **Redis** on port 6380 for the remaining Celery compatibility paths
 - **LocalTaskRunner** executes durable ``local_jobs`` in the test process.
 
 The runner opens its own DB sessions and commits independently, just like
@@ -104,7 +104,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     # Remove all data while preserving the schema.
     await session.execute(
         text(
-            "TRUNCATE local_jobs, stripe_webhook_events, eval_monitors, session_scores, trace_scores, eval_runs, spans, traces, api_keys, memberships, users, projects, subscriptions, usage_records, organizations CASCADE"
+            "TRUNCATE local_jobs, stripe_webhook_events, cli_auth_codes, eval_monitors, session_scores, trace_scores, eval_runs, spans, traces, api_keys, memberships, users, projects, subscriptions, usage_records, organizations CASCADE"
         )
     )
     await session.commit()

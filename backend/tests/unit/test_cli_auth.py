@@ -54,8 +54,8 @@ def test_key_name_from_label_truncated_to_255():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("bad_days", [30, 60, 91, 365, 0])
 async def test_issue_code_rejects_non_90_day_lifetime(bad_days):
-    # The lifetime check runs before any DB/Redis access, so None deps are fine here.
-    svc = CliAuthService(None, None)  # type: ignore[arg-type]
+    # The lifetime check runs before any DB access, so a null session is fine here.
+    svc = CliAuthService(None)  # type: ignore[arg-type]
     with pytest.raises(ValidationError, match="90-day"):
         await svc.issue_code(
             user_id=uuid4(),

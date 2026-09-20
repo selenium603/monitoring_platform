@@ -1,7 +1,7 @@
 """Integration tests for the CLI OAuth2 + PKCE login flow.
 
-Exercises the full issue -> exchange path against a real database and
-real Redis. B1 (``issue_code``) is driven through the service (it would
+Exercises the full issue -> exchange path against a real database. B1
+(``issue_code``) is driven through the service (it would
 otherwise require a Firebase JWT); B2 (``exchange``) is driven through
 the real HTTP endpoint, which needs no auth.
 """
@@ -11,7 +11,6 @@ import hashlib
 import secrets
 
 import pytest
-import redis.asyncio as aioredis
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +18,6 @@ from app.infrastructure.db.repositories.identity_repo import IdentityRepository
 from app.infrastructure.db.repositories.user_repo import UserRepository
 from app.registry.constants import MembershipRole
 from app.registry.security import hash_api_key
-from app.registry.settings import settings
 from app.services.cli_service import CliAuthService
 
 from .conftest import TEST_ORG_ID, TEST_PROJECT_ID
@@ -46,22 +44,19 @@ async def _seed_member(db_session: AsyncSession):
 
 
 async def _issue_code(db_session: AsyncSession, user_id, challenge: str) -> str:
-    redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-    try:
-        svc = CliAuthService(redis_client, db_session)
-        code, expires_in = await svc.issue_code(
-            user_id=user_id,
-            org_id=TEST_ORG_ID,
-            project_id=TEST_PROJECT_ID,
-            code_challenge=challenge,
-            code_challenge_method="S256",
-            label="laptop",
-            expires_days=90,
-        )
-        assert expires_in == 120
-        return code
-    finally:
-        await redis_client.aclose()
+    svc = CliAuthService(db_session)
+    code, expires_in = await svc.issue_code(
+        user_id=user_id,
+        org_id=TEST_ORG_ID,
+        project_id=TEST_PROJECT_ID,
+        code_challenge=challenge,
+        code_challenge_method="S256",
+        label="laptop",
+        expires_days=90,
+    )
+    await db_session.commit()
+    assert expires_in == 120
+    return code
 
 
 async def test_exchange_returns_working_90d_key(client: AsyncClient, db_session: AsyncSession):
