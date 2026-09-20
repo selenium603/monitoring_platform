@@ -41,6 +41,25 @@ class LocalJobRepository:
         await self._session.flush()
         return job.id
 
+    async def has_active_task(self, task_name: str) -> bool:
+        """Return whether a non-terminal job of this task type already exists."""
+        stmt = (
+            select(LocalJobModel.id)
+            .where(
+                LocalJobModel.task_name == task_name,
+                LocalJobModel.status.in_(
+                    [
+                        LocalJobStatus.PENDING,
+                        LocalJobStatus.RUNNING,
+                        LocalJobStatus.RETRY,
+                    ]
+                ),
+            )
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
     async def claim_next(self, now: datetime | None = None) -> LocalJobModel | None:
         """Atomically claim the oldest ready job, if one exists."""
         now = now or datetime.now(timezone.utc)
