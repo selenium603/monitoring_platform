@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PandaProbe is a monorepo with two top-level apps and Docker Compose orchestration at the root:
 
-- `backend/` — FastAPI service, Celery worker/beat, Alembic migrations (Python 3.12+, managed via `uv`)
+- `backend/` — FastAPI service, local scheduler, Celery worker, Alembic migrations (Python 3.12+, managed via `uv`)
 - `frontend/` — Next.js 16 + React 19 dashboard (TypeScript, yarn)
 - `docker-compose.yml` — production / public-image compose used by `./start.sh`
 - `docker-compose.dev.yml` — build-from-source dev compose (hot reload via bind mounts)
@@ -21,7 +21,7 @@ All commands are driven from the root Makefile. Targets are prefixed `backend-*`
 |---|---|
 | Install everything | `make install` |
 | Full dev stack in Docker (hot reload) | `make up` / `make down` / `make restart` |
-| Tail service logs | `make logs` (or `logs-app`, `logs-worker`, `logs-beat`, `logs-frontend`) |
+| Tail service logs | `make logs` (or `logs-app`, `logs-worker`, `logs-frontend`) |
 | Run backend + frontend on host | `make dev` (also: `make worker` for Celery) |
 | Backend dev only | `make backend-dev` (uvicorn with reload on :8000) |
 | Frontend dev only | `make frontend-dev` (`yarn dev`) |

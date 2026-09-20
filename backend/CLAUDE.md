@@ -49,13 +49,13 @@ For periodic jobs that touch many orgs (usage sync, overage billing, eval monito
 - `dispatch_sync_usage` → fans out `sync_single_org_usage(org_id)` per active org
 - `dispatch_overage_billing` → fans out `bill_single_org(org_id)` per paid active org (rate-limited to `80/s` to stay under Stripe's `100/s` live cap)
 - `dispatch_hobby_reset` → fans out `reset_single_hobby_org(org_id)`
-- `check_eval_monitors` → fans out `process_single_monitor(monitor_id, project_id)` (and uses a Redis lock `check_eval_monitors` with `timeout=60` so only one beat worker drives the tick)
+- `check_eval_monitors` → fans out a durable local `process_single_monitor` job per monitor
 
 When adding new periodic work, follow the same shape — failures stay isolated to a single org, and workers parallelise across slots.
 
-### Beat schedule
+### Local scheduler
 
-Configured in `infrastructure/queue/celery_app.py` using `RedBeatScheduler` (Redis-backed; no on-disk schedule file). Current cadence: eval monitors and usage sync every 5 min; overage billing and hobby reset every 6 hours; invitation expiry every hour.
+Configured in `infrastructure/local_tasks/scheduler.py` and started with the FastAPI lifespan. It writes periodic dispatcher jobs to PostgreSQL `local_jobs`: eval monitors and usage sync every 5 min; overage billing and hobby reset every 6 hours; invitation expiry every hour. Celery remains for event-driven email and CRM tasks.
 
 ## Auth adapter selection
 

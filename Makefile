@@ -4,7 +4,7 @@
        frontend-install frontend-dev frontend-build frontend-lint frontend-typecheck \
        frontend-format frontend-format-check frontend-test-unit frontend-test-e2e \
        frontend-e2e-install frontend-test \
-       up down logs logs-app logs-worker logs-beat logs-frontend ps restart \
+       up down logs logs-app logs-worker logs-frontend ps restart \
        test-unit test-integration test-all test-db-up test-db-down help
 
 # =============================================================================
@@ -126,9 +126,6 @@ logs-app:  ## Tail app logs only
 
 logs-worker:  ## Tail worker logs only
 	docker compose -f docker-compose.dev.yml logs -f worker
-
-logs-beat:  ## Tail beat scheduler logs only
-	docker compose -f docker-compose.dev.yml logs -f beat
 
 logs-frontend:  ## Tail frontend logs only
 	docker compose -f docker-compose.dev.yml logs -f frontend

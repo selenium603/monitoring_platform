@@ -57,7 +57,6 @@ Once running, open:
 make logs            # Tail all service logs
 make logs-app        # Tail backend logs only
 make logs-worker     # Tail worker logs only
-make logs-beat       # Tail beat scheduler logs only
 make logs-frontend   # Tail frontend logs only
 make ps              # Show running containers
 ```

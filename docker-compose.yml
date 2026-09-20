@@ -67,30 +67,6 @@ services:
     networks:
       - pandaprobe
 
-  # ---------- Celery Beat scheduler ----------
-  beat:
-    container_name: pandaprobe-beat
-    image: ghcr.io/chirpz-ai/pandaprobe-backend:latest
-    command:
-      [
-        "/app/.venv/bin/celery",
-        "-A", "app.infrastructure.queue.celery_app",
-        "beat",
-        "--loglevel=info",
-      ]
-    env_file:
-      - ./backend/.env.development
-    environment:
-      - APP_ENV=development
-    restart: on-failure
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - pandaprobe
-
   # ---------- PostgreSQL ----------
   postgres:
     container_name: pandaprobe-postgres

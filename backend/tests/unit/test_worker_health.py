@@ -44,19 +44,6 @@ def test_heartbeat_grace_exceeds_longest_task_time_limit(health: ModuleType) -> 
     assert health._HEARTBEAT_MAX_AGE_S > _EVAL_TIME_LIMIT
 
 
-def test_beat_is_exempt_from_the_pool_check(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Beat runs no pool, so a missing heartbeat must not fail its probe."""
-    monkeypatch.setenv("ROLE", "beat")
-    health = _load_health_module()
-    monkeypatch.setattr(health, "_redis_is_reachable", lambda: True)
-    monkeypatch.setattr(health, "_heartbeat_age_s", lambda: None)
-    # Would be "not consuming" for a worker; beat must still be healthy.
-    monkeypatch.setattr(health, "_queue_has_work", lambda: True)
-
-    healthy, _ = health._is_healthy()
-    assert healthy is True
-
-
 def test_unreachable_broker_is_unhealthy(health: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(health, "_redis_is_reachable", lambda: False)
 

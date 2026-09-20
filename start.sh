@@ -76,7 +76,7 @@ setup_env() {
 
 # ── Service health reporting ──────────────────────────────────────────────────
 
-SERVICES=(postgres redis app worker beat frontend)
+SERVICES=(postgres redis app worker frontend)
 
 print_service_status() {
   echo ""
@@ -97,7 +97,6 @@ print_service_status() {
       redis)    label="Redis" ;;
       app)      label="Backend API" ;;
       worker)   label="Celery Worker" ;;
-      beat)     label="Celery Beat" ;;
       frontend) label="Dashboard" ;;
       *)        label="$svc" ;;
     esac
@@ -246,7 +245,6 @@ cmd_help() {
   echo -e "    ${DIM}redis${RESET}       Redis 7 (broker + cache)        ${DIM}:6379${RESET}"
   echo -e "    ${DIM}app${RESET}         FastAPI backend server          ${DIM}:8000${RESET}"
   echo -e "    ${DIM}worker${RESET}      Celery background worker"
-  echo -e "    ${DIM}beat${RESET}        Celery Beat scheduler"
   echo -e "    ${DIM}frontend${RESET}    Next.js dashboard               ${DIM}:3000${RESET}"
   echo ""
   echo -e "  ${BOLD}Examples:${RESET}"

@@ -1,1 +1,150 @@
+<div align="center">
+  <a href="https://pandaprobe.com/" target="_blank" rel="noopener noreferrer">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-light.png">
+      <source media="(prefers-color-scheme: light)" srcset="docs/assets/logo-dark.png">
+      <img alt="PandaProbe Logo" src="docs/assets/logo-dark.png" width="80%">
+    </picture>
+  </a>
+</div>
 
+<div align="center">
+  <img src="docs/assets/heading.svg" alt="open source agent engineering platform. By Chirpz AI" width="700"/>
+</div>
+
+
+<p align="center">
+  <a href="https://pandaprobe.com/" target="_blank"><img src="https://img.shields.io/badge/PandaProbe_Cloud-0066FF" alt="PandaProbe Cloud"></a>
+  <a href="https://pandaprobe.com/" target="_blank"><img src="https://img.shields.io/badge/Docs-0066FF" alt="Docs"></a>
+  <a href="https://x.com/PandaProbe" target="_blank"><img src="https://img.shields.io/twitter/follow/PandaProbe?style=social" alt="Follow on X"></a>
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/pandaprobe/" alt="PyPI Downloads"><img src="https://static.pepy.tech/badge/pandaprobe" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
+  <a href="https://www.pandaprobe.com/" alt="Website"><img src="https://img.shields.io/badge/made by-Chirpz AI-blue" /></a>
+  <a href="https://discord.gg/A2VfrRhx"><img src="https://img.shields.io/discord/1486405147893436426?label=Discord&logo=discord&logoColor=white&style=flat-square" alt="Discord"></a>
+  <br/>
+  <a href="https://github.com/chirpz-ai/pandaprobe/actions/workflows/build.yml"><img src="https://github.com/chirpz-ai/pandaprobe/actions/workflows/build.yml/badge.svg" alt="Build"></a>
+  <a href="https://github.com/chirpz-ai/pandaprobe/actions/workflows/lint.yml"><img src="https://github.com/chirpz-ai/pandaprobe/actions/workflows/lint.yml/badge.svg" alt="Lint"></a>
+  <a href="https://github.com/chirpz-ai/pandaprobe/actions/workflows/test-unit.yml"><img src="https://github.com/chirpz-ai/pandaprobe/actions/workflows/test-unit.yml/badge.svg" alt="Unit Tests"></a>
+  <a href="https://github.com/chirpz-ai/pandaprobe/actions/workflows/test-integration.yml"><img src="https://github.com/chirpz-ai/pandaprobe/actions/workflows/test-integration.yml/badge.svg" alt="Integration Tests"></a>
+  <a href="https://github.com/chirpz-ai/pandaprobe/actions/workflows/codeql.yml"><img src="https://github.com/chirpz-ai/pandaprobe/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
+</p>
+
+
+<p align="center">
+  <video width="100%" src="https://github.com/user-attachments/assets/074456d9-0af4-4757-8cf7-870746fa2eb6" controls></video>
+</p>
+
+## What is PandaProbe?
+PandaProbe is an open source agent engineering platform. It helps teams collaboratively trace, evaluate, monitor, and debug AI agents. You can use PandaProbe cloud or self host the service.
+
+## Documentation
+
+Visit our client library documentation for quickstart and explore advance <a href="https://docs.pandaprobe.com/tracing/integrations/overview" target="_blank">integrations</a>.
+
+<p align="left">
+  <a href="https://docs.pandaprobe.com/get-started/quickstart" target="_blank">
+    <img alt="Documentation" src="https://img.shields.io/badge/Docs%20Quickstart-0066FF" />
+  </a>
+</p>
+
+## PandaProbe Cloud
+
+Managed deployment by the PandaProbe team, generous free-tier, no credit card required.
+
+<p align="left">
+  <a href="https://app.pandaprobe.com/" target="_blank">
+    <img alt="Sign up for PandaProbe Cloud" src="https://img.shields.io/badge/%C2%BB%20Sign%20up%20for%20PandaProbe%20Cloud-0066FF" />
+  </a>
+</p>
+
+## Self-host PandaProbe
+
+> **Prerequisites:** [Docker](https://docs.docker.com/get-docker/) must be installed and running.
+
+```bash
+git clone https://github.com/chirpz-ai/pandaprobe.git
+cd pandaprobe
+./start.sh
+```
+
+Once running, open:
+- **Dashboard** — http://localhost:3000
+- **API reference** — http://localhost:8000/scalar
+
+## Architecture
+
+```mermaid
+sequenceDiagram
+    participant Client as 📡 SDK / HTTP Client
+    participant API as ⚡ FastAPI
+    participant Auth as 🔐 Auth Service
+    participant IdP as 🌐 Supabase / Firebase
+    participant Identity as 👥 Identity Service
+    participant Trace as 🫆 Trace Service
+    participant Eval as 🧪 Eval Service
+    participant DB as 🗄️ PostgreSQL
+    participant Redis as 📮 Redis
+    participant LocalRunner as ⚙️ Local Task Runner
+    participant Worker as ⚙️ Celery Worker
+    participant LLM as 🤖 LLM Engine (LiteLLM)
+
+    Note over Client,API: Management Plane (Bearer token)
+    Client->>API: Authorization: Bearer <idp_token>
+    API->>Auth: Verify token
+    Auth->>IdP: Validate with provider
+    IdP-->>Auth: User identity
+    Auth-->>API: Authenticated user
+    API->>Identity: /user, /organizations, /projects
+    Identity->>DB: Read / write
+    DB-->>Identity: Result
+    Identity-->>Client: Response
+
+    Note over Client,API: Data Plane (API key)
+    Client->>API: X-API-Key + X-Project-Name
+    API->>Identity: Resolve org & project
+    Identity-->>API: Project context
+
+    API->>Trace: POST /traces
+    Trace->>DB: Enqueue local job
+    DB-->>Client: 202 Accepted
+    LocalRunner->>DB: Claim ingestion job
+    LocalRunner->>DB: Persist trace + spans
+
+    API->>Trace: GET /traces, /sessions
+    Trace->>DB: Query with filters
+    DB-->>Trace: Rows
+    Trace-->>Client: Paginated response
+
+    API->>Eval: POST /evaluations
+    Eval->>DB: Enqueue eval job
+    DB-->>Client: 202 Accepted
+    LocalRunner->>DB: Claim eval job
+    LocalRunner->>LLM: LLM-as-a-judge call
+    LLM-->>LocalRunner: Verdict + score
+    LocalRunner->>DB: Persist evaluation result
+```
+
+## Services
+
+| Service | Description | Port |
+|---|---|---|
+| **frontend** | Next.js dashboard | 3000 |
+| **app** | FastAPI application server | 8000 |
+| **worker** | Celery background worker | — |
+| **postgres** | PostgreSQL 16 | 5432 |
+| **redis** | Redis 7 (broker + cache) | 6379 |
+
+## Contributing
+
+We welcome contributions! Please read the [Contributing Guide](CONTRIBUTING.md) for instructions on setting up your development environment, building from source, running tests, and submitting pull requests.
+
+## Authors
+
+Built by the [Chirpz AI](https://pandaprobe.com/about) team. Contact sina@pandaprobe.com for enquiries.
+
+## License
+
+PandaProbe is licensed under Apache 2.0 — see [LICENSE](LICENSE) for details.

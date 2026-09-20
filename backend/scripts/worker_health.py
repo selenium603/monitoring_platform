@@ -1,4 +1,4 @@
-"""Lightweight HTTP health server for Celery worker / beat containers.
+"""Lightweight HTTP health server for the Celery worker container.
 
 Runs alongside the Celery process (started in the background via ``&``)
 and exposes a ``GET /health`` endpoint that Cloud Run liveness and
@@ -8,7 +8,7 @@ The check has two parts:
 
 1. **Broker reachability** — a raw Redis PING.  A worker cannot be healthy
    without it.
-2. **Pool liveness** (worker only) — the pool stamps a local heartbeat file on
+2. **Pool liveness** — the pool stamps a local heartbeat file on
    every task (see ``celery_app._touch_heartbeat``).  If that heartbeat goes
    stale *while work is queued*, the pool has stopped consuming and Cloud Run
    should restart this container.
@@ -32,8 +32,6 @@ queue list into an ``unacked`` hash.  A wedged pool therefore drains ``LLEN
 celery`` to zero while still holding every message it grabbed — exactly the state
 that must trigger a restart, so counting only the list would report healthy.
 
-Beat has no pool, so it keeps the broker-only check (``ROLE=beat``).
-
 Usage (CI deploy command)::
 
     python /app/scripts/worker_health.py & exec celery -A ... worker ...
@@ -49,8 +47,6 @@ _REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
 _REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
 _REDIS_DB = os.environ.get("REDIS_DB", "0")
 _PING_TIMEOUT = 5
-_ROLE = os.environ.get("ROLE", "worker")
-
 #: Grace period for the pool heartbeat.  Tasks stamp it on prerun and postrun,
 #: so the worst legitimate gap is one long task running start to finish: eval
 #: tasks are allowed 3600s by their own hard ``time_limit`` (session eval runs
@@ -130,9 +126,6 @@ def _heartbeat_age_s() -> float | None:
 def _is_healthy() -> tuple[bool, bytes]:
     if not _redis_is_reachable():
         return False, b"broker unreachable"
-
-    if _ROLE == "beat":
-        return True, b"ok"
 
     age = _heartbeat_age_s()
     if age is None:
