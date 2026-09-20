@@ -68,7 +68,7 @@ async def test_registered_job_skips_active_task_and_allows_new_task(
 
     assert (
         await queue_module.enqueue_registered_job(
-            "dispatch_sync_usage",
+            "bill_single_org",
             {},
             only_if_absent=True,
         )
@@ -78,7 +78,7 @@ async def test_registered_job_skips_active_task_and_allows_new_task(
 
     repository.active = False
     job_id = await queue_module.enqueue_registered_job(
-        "dispatch_sync_usage",
+        "bill_single_org",
         {},
         only_if_absent=True,
     )
@@ -86,10 +86,10 @@ async def test_registered_job_skips_active_task_and_allows_new_task(
     assert job_id == UUID("00000000-0000-4000-a000-000000000123")
     assert session.commits == 1
     assert repository.created[0] == {
-        "task_name": "dispatch_sync_usage",
+        "task_name": "bill_single_org",
         "payload": {},
-        "max_retries": 0,
-        "retry_delay_seconds": 0,
+        "max_retries": 2,
+        "retry_delay_seconds": 15,
         "timeout_seconds": 300,
     }
 

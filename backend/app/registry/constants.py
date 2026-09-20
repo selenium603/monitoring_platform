@@ -56,6 +56,14 @@ class LocalJobStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class WebhookEventStatus(StrEnum):
+    """Processing state for a persisted Stripe webhook event."""
+
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
 class ScoreSource(StrEnum):
     """Who produced the score judgment (not how it arrived).
 
@@ -196,17 +204,6 @@ API_KEY_PREFIX = "sk_pp_"
 
 # Length of the random portion of an API key (bytes, hex-encoded).
 API_KEY_RANDOM_BYTES = 32
-
-# ---------------------------------------------------------------------------
-# Billing / Redis key constants
-# ---------------------------------------------------------------------------
-
-SUB_CACHE_PREFIX = "pp:sub:"
-SUB_CACHE_TTL = 300  # seconds (5 minutes)
-USAGE_KEY_PREFIX = "pp:usage:"
-USAGE_KEY_BUFFER_DAYS = 7
-OVERAGE_LOCK_PREFIX = "pp:overage_lock:"
-OVERAGE_LOCK_TTL = 60  # seconds
 
 # ---------------------------------------------------------------------------
 # Resource name validation

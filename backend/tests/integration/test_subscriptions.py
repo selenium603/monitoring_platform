@@ -19,7 +19,7 @@ from app.infrastructure.db.models import (
 )
 from app.infrastructure.db.repositories.billing_repo import BillingRepository
 from app.main import app
-from app.registry.constants import MembershipRole, SubscriptionPlan, SubscriptionStatus
+from app.registry.constants import MembershipRole, SubscriptionPlan, SubscriptionStatus, UsageCategory
 from app.registry.exceptions import QuotaExceededError
 from app.services.identity_service import IdentityService
 
@@ -129,25 +129,25 @@ async def test_billing_repository_get_or_create_usage_record_idempotent(db_sessi
     assert a.id == b.id
 
 
-async def test_billing_repository_upsert_usage_counters(db_session, billing_isolated_org):
+async def test_billing_repository_increment_and_decrement_usage(db_session, billing_isolated_org):
     repo = BillingRepository(db_session)
     sub = await repo.create_subscription(billing_isolated_org)
     ps = sub.current_period_start
     pe = sub.current_period_end
-    await repo.upsert_usage_counters(
+    await repo.get_or_create_usage_record(billing_isolated_org, ps, pe)
+    incremented = await repo.increment_usage(
         billing_isolated_org,
         ps,
-        pe,
-        trace_count=7,
-        trace_eval_count=3,
-        session_eval_count=2,
+        UsageCategory.TRACES,
+        count=7,
+        hard_limit=100,
     )
+    assert incremented == 7
+    await repo.decrement_usage(billing_isolated_org, ps, UsageCategory.TRACES, count=2)
     await db_session.commit()
     row = await repo.get_current_usage_record(billing_isolated_org, ps)
     assert row is not None
-    assert row.trace_count == 7
-    assert row.trace_eval_count == 3
-    assert row.session_eval_count == 2
+    assert row.trace_count == 5
 
 
 async def test_billing_repository_mark_billed(db_session, billing_isolated_org):

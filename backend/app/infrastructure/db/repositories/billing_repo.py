@@ -8,7 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.billing.entities import Subscription, UsageRecord
 from app.infrastructure.db.models import SubscriptionModel, UsageRecordModel
-from app.registry.constants import SubscriptionPlan, SubscriptionStatus
+from app.registry.constants import SubscriptionPlan, SubscriptionStatus, UsageCategory
+
+
+_USAGE_COLUMN_MAP = {
+    UsageCategory.TRACES: UsageRecordModel.trace_count,
+    UsageCategory.TRACE_EVALS: UsageRecordModel.trace_eval_count,
+    UsageCategory.SESSION_EVALS: UsageRecordModel.session_eval_count,
+}
 
 
 class BillingRepository:
@@ -49,6 +56,12 @@ class BillingRepository:
     async def get_subscription_by_org(self, org_id: UUID) -> Subscription | None:
         """Fetch the subscription for an organization."""
         stmt = select(SubscriptionModel).where(SubscriptionModel.org_id == org_id)
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
+        return self._to_subscription(row) if row else None
+
+    async def get_subscription_by_org_for_update(self, org_id: UUID) -> Subscription | None:
+        """Fetch and lock an organization's subscription row."""
+        stmt = select(SubscriptionModel).where(SubscriptionModel.org_id == org_id).with_for_update()
         row = (await self._session.execute(stmt)).scalar_one_or_none()
         return self._to_subscription(row) if row else None
 
@@ -181,6 +194,63 @@ class BillingRepository:
             return existing
         return await self.create_usage_record(org_id, period_start, period_end)
 
+    async def increment_usage(
+        self,
+        org_id: UUID,
+        period_start: datetime,
+        category: UsageCategory,
+        count: int,
+        hard_limit: int,
+    ) -> int | None:
+        """Increment one counter, returning None when a hard limit is hit."""
+        column = _USAGE_COLUMN_MAP[UsageCategory(category)]
+        conditions = [
+            UsageRecordModel.org_id == org_id,
+            UsageRecordModel.period_start == period_start,
+        ]
+        if hard_limit >= 0:
+            conditions.append(column + count <= hard_limit)
+
+        stmt = (
+            update(UsageRecordModel)
+            .where(*conditions)
+            .values({column.key: column + count, "updated_at": datetime.now(timezone.utc)})
+            .returning(column)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def decrement_usage(
+        self,
+        org_id: UUID,
+        period_start: datetime,
+        category: UsageCategory,
+        count: int,
+    ) -> None:
+        """Compensate an increment without allowing counters below zero."""
+        column = _USAGE_COLUMN_MAP[UsageCategory(category)]
+        stmt = (
+            update(UsageRecordModel)
+            .where(
+                UsageRecordModel.org_id == org_id,
+                UsageRecordModel.period_start == period_start,
+            )
+            .values(
+                {column.key: func.greatest(column - count, 0), "updated_at": datetime.now(timezone.utc)}
+            )
+        )
+        await self._session.execute(stmt)
+
+    async def try_lock_subscription(self, org_id: UUID) -> bool:
+        """Try to acquire a non-blocking row lock for billing work."""
+        stmt = (
+            select(SubscriptionModel.id)
+            .where(SubscriptionModel.org_id == org_id)
+            .with_for_update(skip_locked=True)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
     async def get_unbilled_usage_records(self, org_id: UUID) -> list[UsageRecord]:
         """Return all un-billed usage records for an org."""
         stmt = (
@@ -193,39 +263,6 @@ class BillingRepository:
         )
         rows = (await self._session.execute(stmt)).scalars().all()
         return [self._to_usage(r) for r in rows]
-
-    async def upsert_usage_counters(
-        self,
-        org_id: UUID,
-        period_start: datetime,
-        period_end: datetime,
-        *,
-        trace_count: int = 0,
-        trace_eval_count: int = 0,
-        session_eval_count: int = 0,
-    ) -> None:
-        """Set usage counters from Redis snapshot (absolute values)."""
-        row = (
-            await self._session.execute(
-                select(UsageRecordModel).where(
-                    UsageRecordModel.org_id == org_id,
-                    UsageRecordModel.period_start == period_start,
-                )
-            )
-        ).scalar_one_or_none()
-
-        if row is None:
-            row = UsageRecordModel(
-                org_id=org_id,
-                period_start=period_start,
-                period_end=period_end,
-            )
-            self._session.add(row)
-
-        row.trace_count = trace_count
-        row.trace_eval_count = trace_eval_count
-        row.session_eval_count = session_eval_count
-        await self._session.flush()
 
     async def mark_billed(self, org_id: UUID, period_start: datetime, stripe_invoice_id: str | None) -> None:
         """Mark a usage record as billed with the Stripe invoice ID."""

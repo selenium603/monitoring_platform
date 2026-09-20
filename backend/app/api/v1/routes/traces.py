@@ -16,15 +16,12 @@ from fastapi import APIRouter, Body, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import redis.asyncio as aioredis
-
 from app.api.context import ApiContext
 from app.api.dependencies import require_project
 from app.api.rate_limit import limiter
 from app.api.v1.schemas import PaginatedResponse
 from app.core.traces.entities import Span, Trace, TraceDetail
 from app.infrastructure.db.engine import get_db_session
-from app.infrastructure.redis.client import get_redis
 from app.registry.constants import (
     AnalyticsGranularity,
     AnalyticsMetric,
@@ -290,7 +287,6 @@ async def ingest_trace(
     request: Request,
     body: TraceCreate,
     ctx: ApiContext = Depends(require_project),
-    redis_client: aioredis.Redis = Depends(get_redis),
     session: AsyncSession = Depends(get_db_session),
 ) -> TraceAccepted:
     """Accept a trace payload for asynchronous persistence (upsert).
@@ -299,7 +295,7 @@ async def ingest_trace(
 
     Rate limit: `100/min`
     """
-    usage_svc = UsageService(redis_client, session)
+    usage_svc = UsageService(session)
     await usage_svc.check_and_increment(ctx.organization.id, UsageCategory.TRACES)
     try:
         trace = Trace(

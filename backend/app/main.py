@@ -15,7 +15,6 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.api.middleware import RequestContextMiddleware
 from app.api.rate_limit import limiter
 from app.api.v1.router import v1_router
-from app.infrastructure.redis.client import close_redis_pool
 from app.infrastructure.local_tasks.runner import local_task_runner
 from app.infrastructure.local_tasks.scheduler import local_scheduler
 from app.logging import logger
@@ -64,7 +63,6 @@ async def lifespan(app: FastAPI):
         await local_scheduler.stop()
         await local_task_runner.stop()
         AnalyticsService.shutdown()
-        await close_redis_pool()
         logger.info("application_shutdown")
 
 

@@ -9,7 +9,6 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import UUID
 
-import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +18,6 @@ from app.api.dependencies import get_api_context
 from app.core.billing.plans import OVERAGE_UNIT_PRICE, PLAN_LIMITS, get_plan_config
 from app.infrastructure.db.engine import get_db_session
 from app.infrastructure.db.repositories.billing_repo import BillingRepository
-from app.infrastructure.redis.client import get_redis
 from app.registry.constants import SubscriptionPlan, SubscriptionStatus
 from app.registry.exceptions import AuthenticationError, NotFoundError, ValidationError
 from app.services.billing_service import BillingService
@@ -184,7 +182,6 @@ async def get_subscription(
 async def get_usage(
     org_id: UUID,
     ctx: ApiContext = Depends(get_api_context),
-    redis_client: aioredis.Redis = Depends(get_redis),
     session: AsyncSession = Depends(get_db_session),
 ) -> UsageResponse:
     """Get the current period's usage breakdown.
@@ -195,7 +192,7 @@ async def get_usage(
     svc = IdentityService(session)
     await svc.require_membership(ctx.user.id, org_id)
 
-    usage_svc = UsageService(redis_client, session)
+    usage_svc = UsageService(session)
     summary = await usage_svc.get_current_usage(org_id)
     return UsageResponse(
         plan=summary.plan,
@@ -213,7 +210,6 @@ async def get_usage(
 async def get_billing(
     org_id: UUID,
     ctx: ApiContext = Depends(get_api_context),
-    redis_client: aioredis.Redis = Depends(get_redis),
     session: AsyncSession = Depends(get_db_session),
 ) -> BillingResponse:
     """Get the current billing period's cost breakdown including overages.
@@ -235,7 +231,7 @@ async def get_billing(
     plan = SubscriptionPlan(sub.plan)
     plan_cfg = get_plan_config(plan)
 
-    usage_svc = UsageService(redis_client, session)
+    usage_svc = UsageService(session)
     summary = await usage_svc.get_current_usage(org_id)
 
     base_t = plan_cfg.base_traces or 0

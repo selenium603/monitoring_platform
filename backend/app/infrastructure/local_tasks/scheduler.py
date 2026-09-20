@@ -23,11 +23,6 @@ PERIODIC_TASKS = (
         interval_seconds=300,
     ),
     PeriodicTask(
-        name="dispatch-sync-usage",
-        task_name="dispatch_sync_usage",
-        interval_seconds=300,
-    ),
-    PeriodicTask(
         name="dispatch-overage-billing",
         task_name="dispatch_overage_billing",
         interval_seconds=21600,

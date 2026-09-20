@@ -35,5 +35,5 @@ def _identity_key(request: Request) -> str:
 limiter = Limiter(
     key_func=_identity_key,
     default_limits=[settings.RATE_LIMIT_DEFAULT],
-    storage_uri=settings.REDIS_URL,
+    storage_uri="memory://",
 )

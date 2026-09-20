@@ -16,20 +16,19 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 import stripe
 from httpx import AsyncClient, Response
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.db.models import SubscriptionModel, UsageRecordModel
+from app.infrastructure.db.models import StripeWebhookEventModel, SubscriptionModel, UsageRecordModel
 from app.infrastructure.db.repositories.billing_repo import BillingRepository
-from app.infrastructure.redis.client import redis_pool
-from app.infrastructure.redis.locks import acquire_owned_lock
+from app.infrastructure.db.repositories.stripe_webhook_repo import StripeWebhookRepository
 from app.registry.constants import SubscriptionPlan, SubscriptionStatus
 from app.registry.settings import settings
 
@@ -37,21 +36,6 @@ from .conftest import TEST_ORG_ID
 
 _WEBHOOK_PATH = "/webhooks/stripe"
 _STRIPE_SUB_ID = "sub_webhook_verify"
-
-
-@pytest.fixture(autouse=True)
-async def _drop_pooled_redis_connections():
-    """Release the module-level Redis pool between tests.
-
-    Unlike the rest of the API, the webhook route takes its Redis client from the
-    module-level ``redis_pool`` rather than the ``get_redis`` dependency, so the
-    autouse override in ``conftest`` does not reach it.  Each test gets a fresh
-    event loop, and connections pooled on a previous one raise "Event loop is
-    closed" when reused — the same hazard the engine ``dispose()`` in conftest
-    guards against.
-    """
-    yield
-    await redis_pool.disconnect()
 
 
 def _sign(payload: bytes) -> str:
@@ -238,32 +222,6 @@ async def test_invoice_payment_failed_marks_past_due(
     assert sub.status == SubscriptionStatus.PAST_DUE
 
 
-async def test_lock_acquire_retry_still_processes_webhook(
-    deliver,
-    db_session: AsyncSession,
-    paid_subscription: tuple[datetime, datetime],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A replay after Redis accepted the lock must still report acquisition."""
-    calls = 0
-
-    async def replayed_acquire(client, key: str, token: str, *, ttl: int) -> bool:
-        nonlocal calls
-        calls += 1
-        assert await acquire_owned_lock(client, key, token, ttl=ttl) is True
-        return await acquire_owned_lock(client, key, token, ttl=ttl)
-
-    monkeypatch.setattr("app.api.v1.routes.webhooks.acquire_owned_lock", replayed_acquire)
-
-    response = await deliver(_event("invoice.payment_failed", _dahlia_invoice(status="open")))
-    assert response.status_code == 200
-    assert calls == 1
-
-    sub = await BillingRepository(db_session).get_subscription_by_org(TEST_ORG_ID)
-    assert sub is not None
-    assert sub.status == SubscriptionStatus.PAST_DUE
-
-
 async def test_one_off_invoice_is_ignored(
     deliver,
     db_session: AsyncSession,
@@ -313,3 +271,48 @@ async def test_duplicate_delivery_is_processed_once(
 
     # The original period is still the one marked billed.
     assert (await repo.get_current_usage_record(TEST_ORG_ID, period_start)) is not None
+
+    event_id = json.loads(body)["id"]
+    event = (
+        await db_session.get(StripeWebhookEventModel, event_id)
+    )
+    assert event is not None
+    assert event.status == "COMPLETED"
+
+
+async def test_failed_webhook_claim_can_be_reclaimed(db_session: AsyncSession) -> None:
+    repo = StripeWebhookRepository(db_session)
+    event_id = f"evt_{uuid4().hex}"
+
+    assert await repo.try_claim(event_id, "invoice.paid") is True
+    await db_session.commit()
+    await repo.mark_failed(event_id, "temporary failure")
+    await db_session.commit()
+
+    assert await repo.try_claim(event_id, "invoice.paid") is True
+
+
+async def test_stale_processing_webhook_can_be_reclaimed(db_session: AsyncSession) -> None:
+    repo = StripeWebhookRepository(db_session)
+    event_id = f"evt_{uuid4().hex}"
+
+    assert await repo.try_claim(event_id, "invoice.paid") is True
+    await db_session.execute(
+        update(StripeWebhookEventModel)
+        .where(StripeWebhookEventModel.event_id == event_id)
+        .values(locked_at=datetime.now(timezone.utc) - timedelta(minutes=6))
+    )
+    await db_session.commit()
+
+    assert await repo.try_claim(event_id, "invoice.paid") is True
+
+
+async def test_completed_webhook_claim_is_not_reclaimed(db_session: AsyncSession) -> None:
+    repo = StripeWebhookRepository(db_session)
+    event_id = f"evt_{uuid4().hex}"
+
+    assert await repo.try_claim(event_id, "invoice.paid") is True
+    await repo.mark_completed(event_id)
+    await db_session.commit()
+
+    assert await repo.try_claim(event_id, "invoice.paid") is False

@@ -77,24 +77,6 @@ async def process_single_monitor_handler(payload: dict[str, Any]) -> Any:
         }
 
 
-async def dispatch_sync_usage_handler(payload: dict[str, Any]) -> Any:
-    """Dispatch usage synchronization jobs for active organizations."""
-    from app.infrastructure.queue.tasks import _dispatch_sync_usage
-
-    try:
-        return await _dispatch_sync_usage()
-    except Exception as exc:  # noqa: BLE001 - preserve Celery wrapper behavior
-        logger.error("dispatch_sync_usage_failed", error=str(exc))
-        return {"error": str(exc)}
-
-
-async def sync_single_org_usage_handler(payload: dict[str, Any]) -> Any:
-    """Synchronize usage counters for one organization."""
-    from app.infrastructure.queue.tasks import _sync_single_org_usage
-
-    return await _sync_single_org_usage(payload["org_id"])
-
-
 async def dispatch_overage_billing_handler(payload: dict[str, Any]) -> Any:
     """Dispatch overage billing jobs for paid organizations."""
     from app.infrastructure.queue.tasks import _dispatch_overage_billing
@@ -189,21 +171,6 @@ PROCESS_SINGLE_MONITOR = LocalTaskDefinition(
     timeout_seconds=300,
 )
 
-DISPATCH_SYNC_USAGE = LocalTaskDefinition(
-    handler=dispatch_sync_usage_handler,
-    max_retries=0,
-    retry_delay_seconds=0,
-    timeout_seconds=300,
-)
-
-SYNC_SINGLE_ORG_USAGE = LocalTaskDefinition(
-    handler=sync_single_org_usage_handler,
-    max_retries=2,
-    retry_delay_seconds=10,
-    timeout_seconds=300,
-    retry_on_timeout=True,
-)
-
 DISPATCH_OVERAGE_BILLING = LocalTaskDefinition(
     handler=dispatch_overage_billing_handler,
     max_retries=0,
@@ -247,8 +214,6 @@ TASK_DEFINITIONS: dict[str, LocalTaskDefinition] = {
     "execute_session_eval_run": EXECUTE_SESSION_EVAL,
     "check_eval_monitors": CHECK_EVAL_MONITORS,
     "process_single_monitor": PROCESS_SINGLE_MONITOR,
-    "dispatch_sync_usage": DISPATCH_SYNC_USAGE,
-    "sync_single_org_usage": SYNC_SINGLE_ORG_USAGE,
     "dispatch_overage_billing": DISPATCH_OVERAGE_BILLING,
     "bill_single_org": BILL_SINGLE_ORG,
     "dispatch_hobby_reset": DISPATCH_HOBBY_RESET,
