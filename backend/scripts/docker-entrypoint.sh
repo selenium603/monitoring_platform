@@ -49,6 +49,7 @@ if /app/.venv/bin/python -m alembic upgrade head 2>&1; then
     ok "Migrations applied"
 else
     fail "Migrations failed (see output above)"
+    exit 1
 fi
 
 echo ""
