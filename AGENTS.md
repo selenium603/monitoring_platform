@@ -6,11 +6,11 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 PandaProbe is a monorepo with two top-level apps and Docker Compose orchestration at the root:
 
-- `backend/` — FastAPI service, local scheduler, Celery worker, Alembic migrations (Python 3.12+, managed via `uv`)
+- `backend/` — FastAPI service, local scheduler, Alembic migrations (Python 3.12+, managed via `uv`)
 - `frontend/` — Next.js 16 + React 19 dashboard (TypeScript, yarn)
 - `docker-compose.yml` — production / public-image compose used by `./start.sh`
 - `docker-compose.dev.yml` — build-from-source dev compose (hot reload via bind mounts)
-- `docker-compose.test.yml` — Postgres 5433 + Redis 6380 for backend integration tests
+- `docker-compose.test.yml` — Postgres 5433 for backend integration tests
 - Root `Makefile` — single entry point that delegates to `backend/Makefile` and `frontend/Makefile`. Run `make help` to list every target.
 
 ## Common commands
@@ -21,13 +21,13 @@ All commands are driven from the root Makefile. Targets are prefixed `backend-*`
 |---|---|
 | Install everything | `make install` |
 | Full dev stack in Docker (hot reload) | `make up` / `make down` / `make restart` |
-| Tail service logs | `make logs` (or `logs-app`, `logs-worker`, `logs-frontend`) |
-| Run backend + frontend on host | `make dev` (also: `make worker` for Celery) |
+| Tail service logs | `make logs` (or `logs-app`, `logs-frontend`) |
+| Run backend + frontend on host | `make dev` |
 | Backend dev only | `make backend-dev` (uvicorn with reload on :8000) |
 | Frontend dev only | `make frontend-dev` (`yarn dev`) |
 | Lint / format / typecheck | `make lint`, `make format`, `make typecheck` |
 | Backend unit tests | `make backend-test-unit` (host, no infra) |
-| Backend integration tests | `make test-integration` (spins up `docker-compose.test.yml` on ports 5433/6380, tears down after) |
+| Backend integration tests | `make test-integration` (spins up `docker-compose.test.yml` on port 5433, tears down after) |
 | Frontend unit tests (Jest) | `make frontend-test-unit` |
 | Frontend E2E (Playwright) | `make frontend-e2e-install` once, then `make frontend-test-e2e` |
 | All tests | `make test-all` |
@@ -36,7 +36,7 @@ Run a single backend test:
 ```bash
 cd backend && uv run --group test pytest tests/unit/test_traces.py::test_name -v
 ```
-For integration tests, set the same env vars the Makefile uses (`POSTGRES_PORT=5433 POSTGRES_DB=pandaprobe_test_db REDIS_PORT=6380`) and target `tests/integration/`.
+For integration tests, set the same env vars the Makefile uses (`POSTGRES_PORT=5433 POSTGRES_DB=pandaprobe_test_db`) and target `tests/integration/`.
 
 Run a single frontend Jest test:
 ```bash
@@ -70,13 +70,12 @@ The FastAPI app exposes a single `/v1` router (`backend/app/api/v1/router.py`) b
 - `infrastructure/` — Adapters for external systems:
   - `auth/` — `base.AuthAdapter` + `firebase.py`, `supabase.py`, `development.py` (no-op). Selected via `get_auth_adapter()`.
   - `db/` — SQLAlchemy async engine, ORM models (`models.py`), and `repositories/` (concrete repos returning core entities).
-  - `queue/` — `celery_app.py` (broker = Redis) and `tasks.py` (ingestion and eval workers).
-  - `redis/` — async client + pool.
+  - `local_tasks/` — PostgreSQL-backed durable queue, scheduler, runner, and handlers.
   - `llm/` — LiteLLM-based judge engine.
 - `registry/` — Cross-cutting: `settings.py` (pydantic-settings, env-driven), `exceptions.py` (domain errors → JSON), `constants.py`, `security.py` (API-key hashing).
 - `main.py` — composition root: lifespan hooks, CORS, middleware order, exception handlers, router include, Scalar docs at `/scalar`.
 
-Ingestion path: SDK `POST /traces` → router enqueues to Redis → Celery worker persists trace + spans (`backend/app/infrastructure/queue/tasks.py`). Evaluations follow the same pattern, with the worker calling LiteLLM and writing the verdict.
+Ingestion path: SDK `POST /traces` → router writes a `local_jobs` row → the in-process runner persists trace + spans. Evaluations follow the same pattern, with the runner calling LiteLLM and writing the verdict.
 
 ### Frontend structure (`frontend/src/`)
 
@@ -90,14 +89,14 @@ Ingestion path: SDK `POST /traces` → router enqueues to Redis → Celery worke
 
 ### Configuration
 
-Backend reads `.env.${APP_ENV}` (e.g. `backend/.env.development`) via pydantic-settings. Key env vars: `APP_ENV`, `AUTH_PROVIDER` (`supabase`/`firebase`), `AUTH_ENABLED`, Postgres/Redis connection vars, Stripe keys, LiteLLM credentials. Frontend reads `frontend/.env.development`; `NEXT_PUBLIC_API_URL` is the only required public var.
+Backend reads `.env.${APP_ENV}` (e.g. `backend/.env.development`) via pydantic-settings. Key env vars: `APP_ENV`, `AUTH_PROVIDER` (`supabase`/`firebase`), `AUTH_ENABLED`, PostgreSQL connection vars, Stripe keys, LiteLLM credentials. Frontend reads `frontend/.env.development`; `NEXT_PUBLIC_API_URL` is the only required public var.
 
-Test suite sets `APP_ENV=test`, `CELERY_TASK_ALWAYS_EAGER=true`, and points at the test-compose ports (see `backend/tests/conftest.py`).
+Test suite sets `APP_ENV=test` and points at the test-compose PostgreSQL port (see `backend/tests/conftest.py`).
 
 ## Conventions worth knowing
 
 - Ruff is configured at `backend/pyproject.toml` with `line-length = 119`, Google docstring convention, and `B`/`ERA`/`D` rules enabled. `make backend-format` runs `ruff format`.
 - Frontend uses Prettier + ESLint (`eslint-config-next`). `make frontend-format-check` is what CI runs; commits with unformatted code will be rejected.
 - Migrations are auto-generated against the **local** Postgres on port 5432, not the test DB. Bring up `make up` (or just the postgres service) before `make migration`.
-- Integration tests **must not** be pointed at the dev database — the Makefile sets `POSTGRES_PORT=5433`/`REDIS_PORT=6380` and tears the stack down with `-v` after the run to guarantee isolation.
+- Integration tests **must not** be pointed at the dev database — the Makefile sets `POSTGRES_PORT=5433` and tears the stack down with `-v` after the run to guarantee isolation.
 - The repo's frontend `AGENTS.md` (`frontend/AGENTS.md`) is a one-line `@AGENTS.md` import; that file does not currently exist, so there is no additional frontend-specific guidance to load beyond this file.

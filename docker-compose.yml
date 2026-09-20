@@ -1,20 +1,21 @@
 # =============================================================================
-# PandaProbe — Pull-mode Docker Compose (for open-source users)
+# PandaProbe — Local Docker Compose
 #
-# Pulls pre-built public images from GHCR.  No local build required.
+# Builds the backend and frontend from the checked-out source tree.
 #
-#   1. cp backend/.env.example  backend/.env.development
+#   1. cp backend/.env.example backend/.env.development
 #   2. cp frontend/.env.example frontend/.env.development
-#   3. docker compose up
-#
-# For development with source-code hot reload, use docker-compose.dev.yml.
+#   3. docker compose up --build
 # =============================================================================
 
 services:
   # ---------- FastAPI application ----------
   app:
     container_name: pandaprobe-app
-    image: ghcr.io/chirpz-ai/pandaprobe-backend:latest
+    build:
+      context: ./backend
+      args:
+        APP_ENV: development
     ports:
       - "8000:8000"
     volumes:
@@ -33,36 +34,6 @@ services:
     restart: on-failure
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - pandaprobe
-
-  # ---------- Celery background worker ----------
-  worker:
-    container_name: pandaprobe-worker
-    image: ghcr.io/chirpz-ai/pandaprobe-backend:latest
-    command:
-      [
-        "/app/.venv/bin/celery",
-        "-A", "app.infrastructure.queue.celery_app",
-        "worker",
-        "--loglevel=info",
-        "--autoscale=10,2",
-      ]
-    volumes:
-      - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
-    env_file:
-      - ./backend/.env.development
-    environment:
-      - APP_ENV=development
-      - GOOGLE_APPLICATION_CREDENTIALS=/home/appuser/.config/gcloud/application_default_credentials.json
-    restart: on-failure
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     networks:
       - pandaprobe
@@ -88,29 +59,21 @@ services:
     networks:
       - pandaprobe
 
-  # ---------- Redis ----------
-  redis:
-    container_name: pandaprobe-redis
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: always
-    networks:
-      - pandaprobe
-
   # ---------- Next.js frontend ----------
   frontend:
     container_name: pandaprobe-frontend
-    image: ghcr.io/chirpz-ai/pandaprobe-frontend:latest
+    build:
+      context: ./frontend
+      target: runner
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
       - "3000:3000"
+    env_file:
+      - path: ./frontend/.env.development
+        required: false
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
       interval: 30s
@@ -130,4 +93,3 @@ networks:
 
 volumes:
   postgres-data:
-  redis-data:

@@ -5,7 +5,8 @@
 #
 #   docker compose -f docker-compose.dev.yml up --build
 #
-# For running with pre-built public images, use docker-compose.yml instead.
+# For a production-style local build without source bind mounts, use
+# docker-compose.yml instead.
 # =============================================================================
 
 services:
@@ -36,40 +37,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - pandaprobe
-
-  # ---------- Celery background worker ----------
-  worker:
-    build:
-      context: ./backend
-      args:
-        APP_ENV: ${APP_ENV:-development}
-    command:
-      [
-        "/app/.venv/bin/celery",
-        "-A", "app.infrastructure.queue.celery_app",
-        "worker",
-        "--loglevel=info",
-        "--autoscale=10,2",
-      ]
-    volumes:
-      - ./backend/app:/app/app
-      - ./backend/logs:/app/logs
-      - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
-    env_file:
-      - ./backend/.env.${APP_ENV:-development}
-    environment:
-      - APP_ENV=${APP_ENV:-development}
-      - GOOGLE_APPLICATION_CREDENTIALS=/home/appuser/.config/gcloud/application_default_credentials.json
-    restart: on-failure
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
       - pandaprobe
 
@@ -86,22 +53,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-pandaprobe_db}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: always
-    networks:
-      - pandaprobe
-
-  # ---------- Redis ----------
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -147,4 +98,3 @@ networks:
 
 volumes:
   postgres-data:
-  redis-data:

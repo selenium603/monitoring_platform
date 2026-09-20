@@ -195,14 +195,17 @@ class IdentityService:
         )
 
         if settings.RESEND_API_KEY and settings.APP_URL:
-            from app.infrastructure.queue.tasks import send_invitation_email_task
+            from app.infrastructure.local_tasks.queue import enqueue_registered_job
 
-            send_invitation_email_task.delay(
-                to=email,
-                org_name=invitation.org_name,
-                inviter_name=actor_user.display_name if actor_user else "",
-                role=role.value,
-                app_url=settings.APP_URL,
+            await enqueue_registered_job(
+                "send_invitation_email",
+                {
+                    "to": email,
+                    "org_name": invitation.org_name,
+                    "inviter_name": actor_user.display_name if actor_user else "",
+                    "role": role.value,
+                    "app_url": settings.APP_URL,
+                },
             )
 
         return invitation

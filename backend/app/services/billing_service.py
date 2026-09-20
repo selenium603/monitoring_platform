@@ -27,7 +27,8 @@ from app.registry.settings import settings
 _stripe_configured = False
 
 #: Transport config, applied once at first use (no network I/O). The SDK's own
-#: default read timeout is 80s, which retries can multiply — long enough to wedge a Celery prefork child.
+#: default read timeout is 80s, which retries can multiply — long enough to
+#: stall a local background job.
 _STRIPE_TIMEOUT_S = 20
 _STRIPE_MAX_RETRIES = 2
 
@@ -74,7 +75,7 @@ def _ensure_stripe_configured() -> None:
         raise StripeNotConfiguredError(
             "STRIPE_SECRET_KEY is not set; this service cannot call Stripe. "
             "Cloud Run services that run billing tasks need the stripe-secret-key "
-            "secret mounted (see worker_secret_env in the deploy Terraform)."
+            "secret mounted in the deployment environment."
         )
     from stripe._http_client import RequestsClient
 

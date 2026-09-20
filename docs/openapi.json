@@ -1438,7 +1438,7 @@
           "evaluations"
         ],
         "summary": "Create Eval Run",
-        "description": "Create a filtered eval run.\n\nResolves traces matching the provided filters, optionally samples\na fraction of them, then dispatches a background Celery task to\nrun the requested metrics asynchronously via an LLM judge.\n\n**Request body fields:**\n\n- **name** *(string, optional)*: Human-readable label, e.g. ``\"Weekly prod eval\"``.\n- **metrics** *(string[], required)*: Metric names to run. Get available names\n  from ``GET /evaluations/trace-metrics``. Example: ``[\"task_completion\", \"tool_correctness\"]``.\n- **filters** *(object, optional)*: Trace selection filters. All fields optional:\n    - **date_from**: ISO 8601 datetime, e.g. ``\"2025-01-15T00:00:00Z\"``.\n      Includes traces started on or after this time.\n    - **date_to**: ISO 8601 datetime. Includes traces started before this time (exclusive).\n    - **status**: One of ``PENDING``, ``RUNNING``, ``COMPLETED``, ``ERROR``.\n    - **session_id**: Exact session ID string.\n    - **user_id**: Exact user ID string.\n    - **tags**: Array of strings, e.g. ``[\"production\", \"v2\"]``. Matches traces with ANY tag.\n    - **name**: Substring match on trace name (case-insensitive).\n- **sampling_rate** *(float, optional, default 1.0)*: Fraction of matching traces\n  to evaluate. ``1.0`` = all, ``0.1`` = random 10%.\n- **model** *(string, optional)*: LLM model override, e.g. ``\"openai/gpt-4o\"``.\n  Uses system default if null.\n\nAuth: ``Bearer`` + ``X-Project-ID`` | ``X-API-Key`` + ``X-Project-Name``\n\nRate limit: ``50/min``",
+        "description": "Create a filtered eval run.\n\nResolves traces matching the provided filters, optionally samples\na fraction of them, then dispatches a durable local background task to\nrun the requested metrics asynchronously via an LLM judge.\n\n**Request body fields:**\n\n- **name** *(string, optional)*: Human-readable label, e.g. ``\"Weekly prod eval\"``.\n- **metrics** *(string[], required)*: Metric names to run. Get available names\n  from ``GET /evaluations/trace-metrics``. Example: ``[\"task_completion\", \"tool_correctness\"]``.\n- **filters** *(object, optional)*: Trace selection filters. All fields optional:\n    - **date_from**: ISO 8601 datetime, e.g. ``\"2025-01-15T00:00:00Z\"``.\n      Includes traces started on or after this time.\n    - **date_to**: ISO 8601 datetime. Includes traces started before this time (exclusive).\n    - **status**: One of ``PENDING``, ``RUNNING``, ``COMPLETED``, ``ERROR``.\n    - **session_id**: Exact session ID string.\n    - **user_id**: Exact user ID string.\n    - **tags**: Array of strings, e.g. ``[\"production\", \"v2\"]``. Matches traces with ANY tag.\n    - **name**: Substring match on trace name (case-insensitive).\n- **sampling_rate** *(float, optional, default 1.0)*: Fraction of matching traces\n  to evaluate. ``1.0`` = all, ``0.1`` = random 10%.\n- **model** *(string, optional)*: LLM model override, e.g. ``\"openai/gpt-4o\"``.\n  Uses system default if null.\n\nAuth: ``Bearer`` + ``X-Project-ID`` | ``X-API-Key`` + ``X-Project-Name``\n\nRate limit: ``50/min``",
         "operationId": "create_eval_run_evaluations_trace_runs_post",
         "security": [
           {
@@ -1579,7 +1579,7 @@
           "evaluations"
         ],
         "summary": "Create Batch Eval Run",
-        "description": "Create an eval run for an explicit list of trace IDs.\n\nEvaluates exactly the provided traces with all requested metrics.\nAll metrics for all traces are processed in a single sequential\nCelery task -- no race conditions on concurrent writes.\n\nAuth: ``Bearer`` + ``X-Project-ID`` | ``X-API-Key`` + ``X-Project-Name``\n\nRate limit: ``50/min``",
+        "description": "Create an eval run for an explicit list of trace IDs.\n\nEvaluates exactly the provided traces with all requested metrics.\nAll metrics for all traces are processed in a single sequential\nlocal job -- no race conditions on concurrent writes.\n\nAuth: ``Bearer`` + ``X-Project-ID`` | ``X-API-Key`` + ``X-Project-Name``\n\nRate limit: ``50/min``",
         "operationId": "create_batch_eval_run_evaluations_trace_runs_batch_post",
         "requestBody": {
           "content": {
@@ -2705,7 +2705,7 @@
           "evaluations"
         ],
         "summary": "Create Session Eval Run",
-        "description": "Create a filter-based session eval run.\n\nResolves sessions matching the provided filters, then dispatches a\nbackground Celery task that computes trace-level signals and\naggregates them into session-level metrics.\n\nAuth: ``Bearer`` + ``X-Project-ID`` | ``X-API-Key`` + ``X-Project-Name``\n\nRate limit: ``50/min``",
+        "description": "Create a filter-based session eval run.\n\nResolves sessions matching the provided filters, then dispatches a\ndurable local background task that computes trace-level signals and\naggregates them into session-level metrics.\n\nAuth: ``Bearer`` + ``X-Project-ID`` | ``X-API-Key`` + ``X-Project-Name``\n\nRate limit: ``50/min``",
         "operationId": "create_session_eval_run_evaluations_session_runs_post",
         "security": [
           {
@@ -7589,7 +7589,7 @@
         "description": "Response body for a successfully enqueued trace.",
         "example": {
           "trace_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-          "task_id": "celery-task-xyz-789"
+          "task_id": "local-job-xyz-789"
         }
       },
       "TraceCreate": {

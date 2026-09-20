@@ -38,50 +38,22 @@ fi
 
 # ── Dependency checks ──────────────────────────────────────────────────────
 echo -e "\n${BOLD}Service connectivity:${NC}"
-
-# PostgreSQL
 if pg_isready -h "${POSTGRES_HOST:-localhost}" -p "${POSTGRES_PORT:-5432}" -U "${POSTGRES_USER:-postgres}" -q 2>/dev/null; then
     ok "PostgreSQL  → ${POSTGRES_HOST:-localhost}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-pandaprobe_db}"
 else
     fail "PostgreSQL  → ${POSTGRES_HOST:-localhost}:${POSTGRES_PORT:-5432} (unreachable)"
 fi
 
-# Redis
-if redis-cli -h "${REDIS_HOST:-localhost}" -p "${REDIS_PORT:-6379}" ping 2>/dev/null | grep -q PONG; then
-    ok "Redis       → ${REDIS_HOST:-localhost}:${REDIS_PORT:-6379}"
+echo -e "\n${BOLD}Running database migrations…${NC}"
+if /app/.venv/bin/python -m alembic upgrade head 2>&1; then
+    ok "Migrations applied"
 else
-    fail "Redis       → ${REDIS_HOST:-localhost}:${REDIS_PORT:-6379} (unreachable)"
+    fail "Migrations failed (see output above)"
 fi
 
-# ── Detect service role from CMD ────────────────────────────────────────────
 echo ""
-SERVICE_ROLE="unknown"
-for arg in "$@"; do
-    case "$arg" in
-        *uvicorn*) SERVICE_ROLE="app" ;;
-        *celery*)  SERVICE_ROLE="worker" ;;
-    esac
-done
-
-case "$SERVICE_ROLE" in
-    app)
-        echo -e "${BOLD}Running database migrations…${NC}"
-        if /app/.venv/bin/python -m alembic upgrade head 2>&1; then
-            ok "Migrations applied"
-        else
-            fail "Migrations failed (see output above)"
-        fi
-        echo ""
-        echo -e "${BOLD}Starting:${NC} ${GREEN}App (FastAPI)${NC} on port 8000"
-        echo -e "  Swagger UI → http://localhost:8000/docs"
-        ;;
-    worker)
-        echo -e "${BOLD}Starting:${NC} ${YELLOW}Worker (Celery)${NC}"
-        ;;
-    *)
-        echo -e "${BOLD}Starting:${NC} $*"
-        ;;
-esac
+echo -e "${BOLD}Starting:${NC} ${GREEN}App (FastAPI)${NC} on port 8000"
+echo -e "  Swagger UI → http://localhost:8000/docs"
 
 echo ""
 exec "$@"

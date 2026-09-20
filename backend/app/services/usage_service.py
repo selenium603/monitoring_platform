@@ -1,7 +1,7 @@
 """PostgreSQL-backed usage tracking and quota enforcement.
 
 Usage records are the source of truth. Quota checks and increments are
-performed in PostgreSQL so API requests, local jobs, and billing workers all
+performed in PostgreSQL so API requests, local jobs, and billing tasks all
 observe the same counters without a cache synchronization window.
 """
 

@@ -6,7 +6,7 @@
     "query": "What is PandaProbe's approach to handling trace ingestion at scale? How does it ensure data consistency?"
   },
   "output": {
-    "answer": "PandaProbe handles trace ingestion at scale through an asynchronous architecture. When a trace is submitted via the POST /traces endpoint, it is validated synchronously and immediately enqueued to a Celery task queue backed by Redis. The Celery worker then persists the trace to PostgreSQL using an upsert (INSERT ... ON CONFLICT DO UPDATE) strategy, which ensures idempotency — sending the same trace_id twice updates rather than duplicates. For data consistency, PandaProbe uses database transactions with automatic rollback on failure, and the Celery task includes retry logic (up to 3 retries with a 5-second delay). JSONB metadata fields are merged using PostgreSQL's || operator to preserve existing keys during upserts.",
+    "answer": "PandaProbe handles trace ingestion at scale through an asynchronous architecture. When a trace is submitted via the POST /traces endpoint, it is validated synchronously and immediately enqueued to a local task runner task queue backed by PostgreSQL local_jobs. The local task runner worker then persists the trace to PostgreSQL using an upsert (INSERT ... ON CONFLICT DO UPDATE) strategy, which ensures idempotency — sending the same trace_id twice updates rather than duplicates. For data consistency, PandaProbe uses database transactions with automatic rollback on failure, and the local task runner task includes retry logic (up to 3 retries with a 5-second delay). JSONB metadata fields are merged using PostgreSQL's || operator to preserve existing keys during upserts.",
     "sources": [
       {"document": "architecture-overview.md", "chunk_id": "arch-014", "relevance_score": 0.94},
       {"document": "api-reference.md", "chunk_id": "api-042", "relevance_score": 0.89},
@@ -89,9 +89,9 @@
         "unique_chunks": 8,
         "top_score": 0.94,
         "documents": [
-          {"chunk_id": "arch-014", "score": 0.94, "text": "PandaProbe uses an async-first ingestion pipeline. Traces are validated at the API gateway and enqueued to Celery..."},
+          {"chunk_id": "arch-014", "score": 0.94, "text": "PandaProbe uses an async-first ingestion pipeline. Traces are validated at the API gateway and enqueued to local task runner..."},
           {"chunk_id": "api-042", "score": 0.89, "text": "The POST /traces endpoint accepts a TraceCreate payload and returns 202 Accepted with a task_id..."},
-          {"chunk_id": "deploy-007", "score": 0.82, "text": "For high-throughput deployments, increase the Celery concurrency and PostgreSQL pool size..."}
+          {"chunk_id": "deploy-007", "score": 0.82, "text": "For high-throughput deployments, increase the local task runner concurrency and PostgreSQL pool size..."}
         ]
       },
       "metadata": {"vector_db": "pgvector", "embedding_model": "text-embedding-3-small", "search_type": "hybrid"},
@@ -145,11 +145,11 @@
         "messages": [
           {"role": "system", "content": "You are a technical documentation assistant. Answer the user's question based solely on the provided context. Cite sources using [source:chunk_id] format. If the context doesn't contain enough information, say so."},
           {"role": "user", "content": "What is PandaProbe's approach to handling trace ingestion at scale? How does it ensure data consistency?"},
-          {"role": "system", "content": "Context:\n[arch-014]: PandaProbe uses an async-first ingestion pipeline. Traces are validated at the API gateway and enqueued to Celery backed by Redis. Workers persist to PostgreSQL using upsert semantics.\n[api-042]: The POST /traces endpoint accepts a TraceCreate payload and returns 202 Accepted with a task_id. The Celery worker handles persistence with retry logic (3 retries, 5s delay).\n[deploy-007]: For high-throughput deployments, increase Celery concurrency and PostgreSQL pool size. JSONB metadata is merged with the || operator."}
+          {"role": "system", "content": "Context:\n[arch-014]: PandaProbe uses an async-first ingestion pipeline. Traces are validated at the API gateway and enqueued to local task runner backed by PostgreSQL local_jobs. Workers persist to PostgreSQL using upsert semantics.\n[api-042]: The POST /traces endpoint accepts a TraceCreate payload and returns 202 Accepted with a task_id. The local task runner worker handles persistence with retry logic (3 retries, 5s delay).\n[deploy-007]: For high-throughput deployments, increase local task runner concurrency and PostgreSQL pool size. JSONB metadata is merged with the || operator."}
         ]
       },
       "output": {
-        "content": "PandaProbe handles trace ingestion at scale through an asynchronous architecture. When a trace is submitted via the POST /traces endpoint, it is validated synchronously and immediately enqueued to a Celery task queue backed by Redis. The Celery worker then persists the trace to PostgreSQL using an upsert (INSERT ... ON CONFLICT DO UPDATE) strategy, which ensures idempotency — sending the same trace_id twice updates rather than duplicates. For data consistency, PandaProbe uses database transactions with automatic rollback on failure, and the Celery task includes retry logic (up to 3 retries with a 5-second delay). JSONB metadata fields are merged using PostgreSQL's || operator to preserve existing keys during upserts."
+        "content": "PandaProbe handles trace ingestion at scale through an asynchronous architecture. When a trace is submitted via the POST /traces endpoint, it is validated synchronously and immediately enqueued to a local task runner task queue backed by PostgreSQL local_jobs. The local task runner worker then persists the trace to PostgreSQL using an upsert (INSERT ... ON CONFLICT DO UPDATE) strategy, which ensures idempotency — sending the same trace_id twice updates rather than duplicates. For data consistency, PandaProbe uses database transactions with automatic rollback on failure, and the local task runner task includes retry logic (up to 3 retries with a 5-second delay). JSONB metadata fields are merged using PostgreSQL's || operator to preserve existing keys during upserts."
       },
       "model": "claude-3-5-sonnet-20241022",
       "token_usage": {"prompt_tokens": 342, "completion_tokens": 128, "total_tokens": 470},

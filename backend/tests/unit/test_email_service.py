@@ -1,4 +1,4 @@
-"""Unit tests for the email service and Celery task (no network or DB required)."""
+"""Unit tests for the email service and local task handler (no network or DB required)."""
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -123,7 +123,7 @@ def test_send_welcome_email_propagates_resend_error(
     mock_settings: MagicMock,
     mock_resend: MagicMock,
 ) -> None:
-    """Errors from Resend bubble up so Celery can retry."""
+    """Errors from Resend bubble up so the local runner can retry."""
     mock_settings.RESEND_API_KEY = "re_test_key"
     mock_settings.RESEND_FROM = "Test <test@example.com>"
     mock_settings.RESEND_REPLY_TO = "reply@example.com"
@@ -135,13 +135,14 @@ def test_send_welcome_email_propagates_resend_error(
 
 
 # ---------------------------------------------------------------------------
-# Celery task: send_welcome_sequence
+# Local task handlers: send_welcome_sequence
 # ---------------------------------------------------------------------------
 
 
 @patch("app.services.email_service.resend")
 @patch("app.services.email_service.settings")
-def test_welcome_task_sends_email(
+@pytest.mark.asyncio
+async def test_welcome_task_sends_email(
     mock_settings: MagicMock,
     mock_resend: MagicMock,
 ) -> None:
@@ -150,9 +151,9 @@ def test_welcome_task_sends_email(
     mock_settings.RESEND_REPLY_TO = "reply@example.com"
     mock_resend.Emails.send.return_value = {"id": "ok"}
 
-    from app.infrastructure.queue.tasks import send_welcome_email_task
+    from app.infrastructure.local_tasks.handlers import send_welcome_email
 
-    result = send_welcome_email_task("user@example.com")
+    result = await send_welcome_email("user@example.com")
 
     assert result["status"] == "sent"
     mock_resend.Emails.send.assert_called_once()
@@ -160,7 +161,8 @@ def test_welcome_task_sends_email(
 
 @patch("app.services.email_service.resend")
 @patch("app.services.email_service.settings")
-def test_followup_task_sends_email(
+@pytest.mark.asyncio
+async def test_followup_task_sends_email(
     mock_settings: MagicMock,
     mock_resend: MagicMock,
 ) -> None:
@@ -169,33 +171,35 @@ def test_followup_task_sends_email(
     mock_settings.RESEND_REPLY_TO = "reply@example.com"
     mock_resend.Emails.send.return_value = {"id": "ok"}
 
-    from app.infrastructure.queue.tasks import send_followup_email_task
+    from app.infrastructure.local_tasks.handlers import send_followup_email
 
-    result = send_followup_email_task("user@example.com")
+    result = await send_followup_email("user@example.com")
 
     assert result["status"] == "sent"
     mock_resend.Emails.send.assert_called_once()
 
 
 @patch("app.services.email_service.settings")
-def test_welcome_task_skips_when_unconfigured(mock_settings: MagicMock) -> None:
+@pytest.mark.asyncio
+async def test_welcome_task_skips_when_unconfigured(mock_settings: MagicMock) -> None:
     mock_settings.RESEND_API_KEY = ""
 
-    from app.infrastructure.queue.tasks import send_welcome_email_task
+    from app.infrastructure.local_tasks.handlers import send_welcome_email
 
-    result = send_welcome_email_task("user@example.com")
+    result = await send_welcome_email("user@example.com")
 
     assert result["status"] == "skipped"
     assert result["reason"] == "resend_not_configured"
 
 
 @patch("app.services.email_service.settings")
-def test_followup_task_skips_when_unconfigured(mock_settings: MagicMock) -> None:
+@pytest.mark.asyncio
+async def test_followup_task_skips_when_unconfigured(mock_settings: MagicMock) -> None:
     mock_settings.RESEND_API_KEY = ""
 
-    from app.infrastructure.queue.tasks import send_followup_email_task
+    from app.infrastructure.local_tasks.handlers import send_followup_email
 
-    result = send_followup_email_task("user@example.com")
+    result = await send_followup_email("user@example.com")
 
     assert result["status"] == "skipped"
     assert result["reason"] == "resend_not_configured"

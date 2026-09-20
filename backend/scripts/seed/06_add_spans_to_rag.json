@@ -13,7 +13,7 @@
     },
     "output": {
       "verified_claims": [
-        {"claim": "Traces are validated synchronously and enqueued to Celery", "source": "arch-014", "supported": true},
+        {"claim": "Traces are validated synchronously and enqueued to local task runner", "source": "arch-014", "supported": true},
         {"claim": "Returns 202 Accepted with a task_id", "source": "api-042", "supported": true},
         {"claim": "Upsert with ON CONFLICT DO UPDATE for idempotency", "source": "arch-014", "supported": true},
         {"claim": "3 retries with 5-second delay", "source": "api-042", "supported": true},

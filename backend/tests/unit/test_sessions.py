@@ -65,7 +65,7 @@ def test_trace_entity_preserves_session_fields() -> None:
 
 
 def test_session_fields_survive_serialization_roundtrip() -> None:
-    """Celery roundtrip: model_dump -> model_validate preserves session fields."""
+    """Durable-job roundtrip preserves session fields."""
     trace = _make_trace(session_id="rt-session", user_id="bob", tags=["test"])
     dumped = trace.model_dump(mode="json")
     restored = Trace.model_validate(dumped)
@@ -304,7 +304,7 @@ def test_session_latency_all_incomplete() -> None:
 
 
 def test_span_with_session_trace_roundtrip() -> None:
-    """Ensure a trace with session_id + spans survives Celery serialization."""
+    """Ensure a trace with session_id + spans survives job serialization."""
     now = datetime.now(timezone.utc)
     trace = Trace(
         trace_id=uuid4(),

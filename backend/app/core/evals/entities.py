@@ -96,7 +96,7 @@ class EvalRun(BaseModel):
     """A batch evaluation job targeting a filtered set of traces.
 
     Created with status PENDING, transitions to RUNNING while the
-    Celery worker processes it, and ends at COMPLETED or FAILED.
+    local task runner processes it, and ends at COMPLETED or FAILED.
     """
 
     id: UUID
@@ -144,7 +144,7 @@ class PreparedRun:
 
     The caller is expected to perform quota checks between ``prepare_*``
     and ``dispatch_run``.  If the quota check fails the session can be
-    rolled back and no Celery task will ever fire.
+    rolled back and no background task will ever run.
     """
 
     run: EvalRun

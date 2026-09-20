@@ -1,10 +1,10 @@
-.PHONY: install dev worker lint format migration migrate \
-       backend-install backend-dev backend-worker backend-lint backend-format \
+.PHONY: install dev lint format migration migrate \
+       backend-install backend-dev backend-lint backend-format \
        backend-test-unit backend-test-integration \
        frontend-install frontend-dev frontend-build frontend-lint frontend-typecheck \
        frontend-format frontend-format-check frontend-test-unit frontend-test-e2e \
        frontend-e2e-install frontend-test \
-       up down logs logs-app logs-worker logs-frontend ps restart \
+       up down logs logs-app logs-frontend ps restart \
        test-unit test-integration test-all test-db-up test-db-down help
 
 # =============================================================================
@@ -13,7 +13,7 @@
 #  Docker Compose orchestration lives here at the repo root.
 #
 #  Testing strategy:
-#    Backend  — unit tests run on host; integration tests use Docker (Postgres/Redis)
+#    Backend  — unit tests run on host; integration tests use Docker (PostgreSQL)
 #    Frontend — all tests run on host (yarn). Docker is dev server only.
 # =============================================================================
 
@@ -24,9 +24,6 @@ backend-install:  ## Install backend dependencies
 
 backend-dev:  ## Run the backend API server locally
 	$(MAKE) -C backend dev
-
-backend-worker:  ## Run the backend Celery worker locally
-	$(MAKE) -C backend worker
 
 backend-lint:  ## Run backend linter
 	$(MAKE) -C backend lint
@@ -39,7 +36,7 @@ backend-test-unit:  ## Run backend unit tests
 
 backend-test-integration:  ## Run backend integration tests (starts test infra)
 	docker compose -f docker-compose.test.yml up -d --wait
-	cd backend && POSTGRES_PORT=5433 POSTGRES_DB=pandaprobe_test_db REDIS_PORT=6380 \
+	cd backend && POSTGRES_PORT=5433 POSTGRES_DB=pandaprobe_test_db \
 		uv run --group test pytest tests/integration/ -v; \
 	status=$$?; \
 	cd .. && docker compose -f docker-compose.test.yml down -v; \
@@ -101,9 +98,6 @@ format:  ## Auto-format all code
 typecheck:  ## Run all type checks
 	$(MAKE) frontend-typecheck
 
-worker:  ## Run the backend Celery worker locally
-	$(MAKE) backend-worker
-
 migration:  ## Auto-generate an Alembic migration.  Usage: make migration msg="..."
 	$(MAKE) -C backend migration msg="$(msg)"
 
@@ -123,9 +117,6 @@ logs:  ## Tail dev service logs
 
 logs-app:  ## Tail app logs only
 	docker compose -f docker-compose.dev.yml logs -f app
-
-logs-worker:  ## Tail worker logs only
-	docker compose -f docker-compose.dev.yml logs -f worker
 
 logs-frontend:  ## Tail frontend logs only
 	docker compose -f docker-compose.dev.yml logs -f frontend
@@ -150,7 +141,7 @@ test-all:  ## Run all unit + integration + E2E tests
 	$(MAKE) test-integration
 	$(MAKE) frontend-test-e2e
 
-test-db-up:  ## Start the test PostgreSQL and Redis services
+test-db-up:  ## Start the test PostgreSQL service
 	docker compose -f docker-compose.test.yml up -d --wait
 
 test-db-down:  ## Stop and remove the test services

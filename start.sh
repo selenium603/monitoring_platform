@@ -76,7 +76,7 @@ setup_env() {
 
 # ── Service health reporting ──────────────────────────────────────────────────
 
-SERVICES=(postgres redis app worker frontend)
+SERVICES=(postgres app frontend)
 
 print_service_status() {
   echo ""
@@ -94,9 +94,7 @@ print_service_status() {
     local label
     case "$svc" in
       postgres) label="PostgreSQL" ;;
-      redis)    label="Redis" ;;
       app)      label="Backend API" ;;
-      worker)   label="Celery Worker" ;;
       frontend) label="Dashboard" ;;
       *)        label="$svc" ;;
     esac
@@ -130,8 +128,8 @@ cmd_up() {
   check_docker
   setup_env
 
-  info "Pulling latest images …"
-  docker compose -f "$COMPOSE_FILE" pull
+  info "Building local images …"
+  docker compose -f "$COMPOSE_FILE" build
 
   info "Starting all services …"
   docker compose -f "$COMPOSE_FILE" up -d
@@ -192,10 +190,10 @@ cmd_logs() {
 
 cmd_upgrade() {
   banner
-  info "Pulling latest images …"
-  docker compose -f "$COMPOSE_FILE" pull
+  info "Building local images …"
+  docker compose -f "$COMPOSE_FILE" build
 
-  info "Recreating containers with new images …"
+  info "Recreating containers with the rebuilt images …"
   docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
 
   info "Waiting for services to become healthy …"
@@ -212,7 +210,7 @@ cmd_upgrade() {
 
 cmd_reset() {
   banner
-  warn "This will stop all services and ${BOLD}delete all data${RESET} (database, Redis)."
+  warn "This will stop all services and ${BOLD}delete all database data${RESET}."
   echo ""
   read -rp "  Are you sure? (y/N) " confirm
   if [[ "$confirm" =~ ^[Yy]$ ]]; then
@@ -231,20 +229,18 @@ cmd_help() {
   echo ""
   echo -e "  ${BOLD}Commands:${RESET}"
   echo ""
-  echo -e "    ${CYAN}up${RESET}              Start all services (pulls images on first run)"
+  echo -e "    ${CYAN}up${RESET}              Build and start all services"
   echo -e "    ${CYAN}stop${RESET}            Stop all services"
   echo -e "    ${CYAN}restart${RESET}         Restart all services"
   echo -e "    ${CYAN}status${RESET}          Show running containers and their health"
   echo -e "    ${CYAN}logs${RESET} [service]  Tail logs (all services, or specify one)"
-  echo -e "    ${CYAN}upgrade${RESET}         Pull latest images and restart"
+  echo -e "    ${CYAN}upgrade${RESET}         Rebuild local images and restart"
   echo -e "    ${CYAN}reset${RESET}           Stop services and ${RED}delete all data${RESET}"
   echo -e "    ${CYAN}help${RESET}            Show this help message"
   echo ""
   echo -e "  ${BOLD}Services:${RESET}"
   echo -e "    ${DIM}postgres${RESET}    PostgreSQL 16 database          ${DIM}:5432${RESET}"
-  echo -e "    ${DIM}redis${RESET}       Redis 7 (broker + cache)        ${DIM}:6379${RESET}"
   echo -e "    ${DIM}app${RESET}         FastAPI backend server          ${DIM}:8000${RESET}"
-  echo -e "    ${DIM}worker${RESET}      Celery background worker"
   echo -e "    ${DIM}frontend${RESET}    Next.js dashboard               ${DIM}:3000${RESET}"
   echo ""
   echo -e "  ${BOLD}Examples:${RESET}"

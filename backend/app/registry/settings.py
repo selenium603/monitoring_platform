@@ -83,19 +83,6 @@ class Settings(BaseSettings):
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
-    # -- Redis / Celery -------------------------------------------------------
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
-    REDIS_DB: int = 0
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def REDIS_URL(self) -> str:
-        """Full Redis connection URL."""
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
-
-    CELERY_TASK_ALWAYS_EAGER: bool = False
-
     # -- Logging --------------------------------------------------------------
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "console"

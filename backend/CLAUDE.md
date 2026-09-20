@@ -12,15 +12,14 @@ All targets are exposed at the repo root (`make backend-*`) and as host-side tar
 |---|---|
 | Install (locked) | `uv sync --frozen` |
 | API server (host) | `make dev` — uvicorn on `:8000` with reload, `APP_ENV=development` |
-| Celery worker (host) | `make worker` — needs Redis on `:6379` and Postgres on `:5432` |
 | Lint / format | `make lint` / `make format` (ruff over `app/` and `tests/`) |
 | Unit tests (host, no infra) | `make test-unit` (or `uv run --group test pytest tests/unit/ -v`) |
 | Single unit test | `uv run --group test pytest tests/unit/test_traces.py::test_name -v` |
-| Integration tests | From repo root: `make test-integration` — spins up `docker-compose.test.yml` (Postgres :5433, Redis :6380), runs `tests/integration/`, tears down with `-v` |
+| Integration tests | From repo root: `make test-integration` — spins up `docker-compose.test.yml` (Postgres :5433), runs `tests/integration/`, tears down with `-v` |
 | New migration | `make migration msg="describe change"` — runs `alembic revision --autogenerate` against **local** Postgres on `:5432` |
 | Apply migrations | `make migrate` (auto-applied on `make up` via Docker entrypoint) |
 
-To run integration tests against an already-running test stack: set `POSTGRES_PORT=5433 POSTGRES_DB=pandaprobe_test_db REDIS_PORT=6380` and run `pytest tests/integration/`. `tests/conftest.py` already wires these env vars + `APP_ENV=test` + `CELERY_TASK_ALWAYS_EAGER=true`.
+To run integration tests against an already-running test stack: set `POSTGRES_PORT=5433 POSTGRES_DB=pandaprobe_test_db` and run `pytest tests/integration/`. `tests/conftest.py` already wires these env vars and `APP_ENV=test`.
 
 ## Two auth dependencies — pick the right one
 
@@ -30,32 +29,28 @@ To run integration tests against an already-running test stack: set `POSTGRES_PO
 - `get_data_plane_context` — **data plane**. Accepts Bearer JWT (with `X-Project-ID`) **or** `X-API-Key` (with `X-Project-Name`). **When both are sent, API key wins** — this is intentional to prevent failures when Swagger UI sends a stale JWT alongside a valid key.
 - `require_project` — thin wrapper around `get_data_plane_context` that 422s if `ctx.project is None`. Use this on every `/traces`, `/sessions`, `/evaluations` handler.
 
-`_resolve_jwt` JIT-provisions: upserts the user from the IdP claims, auto-creates "My Organization" on first sign-in (plan = DEVELOPMENT when auth is disabled, else default tier), and on new-user creation enqueues welcome/follow-up emails + CRM sync via Celery. Routes get the resolved org/user via `ApiContext` — they should never re-query identity themselves.
+`_resolve_jwt` JIT-provisions: upserts the user from the IdP claims, auto-creates "My Organization" on first sign-in (plan = DEVELOPMENT when auth is disabled, else default tier), and on new-user creation enqueues welcome/follow-up emails + CRM sync as PostgreSQL-backed local jobs. Routes get the resolved org/user via `ApiContext` — they should never re-query identity themselves.
 
 `_resolve_api_key` resolves projects by *name* within the API key's org and **auto-creates the project if missing**. This is why SDK clients can call `POST /traces` with any new `X-Project-Name`.
 
-## Celery worker: NullPool + per-task asyncio.run
+## Local task runner
 
-`app/infrastructure/queue/tasks.py` has a critical pattern documented in its module docstring — don't deviate:
+`app/infrastructure/local_tasks/` contains the PostgreSQL-backed queue, scheduler, runner, and async handlers. Handlers use the shared application session factory and run inside the FastAPI process.
 
-- Worker uses a **dedicated `NullPool` engine** (`_worker_engine`), not the request-path pool from `infrastructure/db/engine.py`. Every task creates a fresh connection via `_worker_session()` and discards it. Reusing a pooled connection across `asyncio.run()` calls causes `"attached to a different loop"` errors because each `asyncio.run()` creates a new event loop.
-- Each Celery task body is a sync function that immediately calls `asyncio.run(_async_helper(...))`. Don't add async Celery tasks — use this pattern.
-- **Heavy imports go inside the task function**, not at module top. This keeps worker bootup fast and avoids importing FastAPI/auth code into the worker process.
+### Dispatcher + per-organization fanout
 
-### Dispatcher + per-org worker fanout
-
-For periodic jobs that touch many orgs (usage sync, overage billing, eval monitors), the pattern is **one dispatcher task that queries eligible IDs and fans out one sub-task per org/monitor**:
+For periodic jobs that touch many organizations (usage sync, overage billing, eval monitors), the pattern is **one dispatcher job that queries eligible IDs and fans out one durable local job per organization/monitor**:
 
 - `dispatch_sync_usage` → fans out `sync_single_org_usage(org_id)` per active org
 - `dispatch_overage_billing` → fans out `bill_single_org(org_id)` per paid active org (rate-limited to `80/s` to stay under Stripe's `100/s` live cap)
 - `dispatch_hobby_reset` → fans out `reset_single_hobby_org(org_id)`
 - `check_eval_monitors` → fans out a durable local `process_single_monitor` job per monitor
 
-When adding new periodic work, follow the same shape — failures stay isolated to a single org, and workers parallelise across slots.
+When adding new periodic work, follow the same shape — failures stay isolated to a single organization and retry policy stays in `LocalTaskDefinition`.
 
 ### Local scheduler
 
-Configured in `infrastructure/local_tasks/scheduler.py` and started with the FastAPI lifespan. It writes periodic dispatcher jobs to PostgreSQL `local_jobs`: eval monitors and usage sync every 5 min; overage billing and hobby reset every 6 hours; invitation expiry every hour. Celery remains for event-driven email and CRM tasks.
+Configured in `infrastructure/local_tasks/scheduler.py` and started with the FastAPI lifespan. It writes periodic dispatcher jobs to PostgreSQL `local_jobs`: eval monitors and usage sync every 5 min; overage billing and hobby reset every 6 hours; invitation expiry every hour. Email and CRM work use the same local job runner.
 
 ## Auth adapter selection
 
@@ -82,19 +77,17 @@ Pydantic request-body validation errors are reshaped by `validation_exception_ha
 
 Repositories in `infrastructure/db/repositories/` return **core domain entities** (Pydantic models in `app/core/*/entities.py`), not SQLAlchemy `*Model` rows. Services and routes only see entities. If you add a column to a `*Model`, also add it to the entity and the repo mapping — otherwise the field is invisible to callers.
 
-`get_db_session` (`infrastructure/db/engine.py`) is the per-request session dependency. It auto-`commit()`s on success and `rollback()`s on exception. Don't sprinkle `await session.commit()` at the end of route handlers — let the dependency handle it. Workers, in contrast, **must** commit explicitly because they don't go through this dependency.
+`get_db_session` (`infrastructure/db/engine.py`) is the per-request session dependency. It auto-`commit()`s on success and `rollback()`s on exception. Don't sprinkle `await session.commit()` at the end of route handlers — let the dependency handle it. Local task handlers, in contrast, **must** commit explicitly because they don't go through this dependency.
 
 ## Integration test mechanics
 
 `tests/integration/conftest.py` does several non-obvious things — read it before writing new integration tests:
 
-- **`nest_asyncio.apply()`** at import time so Celery's `asyncio.run(...)` works inside the pytest-asyncio loop (eager mode).
-- **TRUNCATE-based isolation**, not transaction rollback. The Celery task creates its own session/connection (matching real worker behaviour), so wrapping each test in a transaction would hide its commits from the test code. After each test, every table is `TRUNCATE ... CASCADE`d and the async engine pool is `dispose()`d so pooled connections don't leak into the next test's event loop.
+- **TRUNCATE-based isolation**, not transaction rollback. The local task runner creates its own session/connection, so wrapping each test in a transaction would hide its commits from the test code. After each test, every table is `TRUNCATE ... CASCADE`d and the async engine pool is `dispose()`d so pooled connections don't leak into the next test's event loop.
 - **Fixed seed UUIDs** (`TEST_ORG_ID`, `TEST_PROJECT_ID`) so every fixture in a test shares the same identity.
-- **`autouse` dep overrides** replace `get_db_session`, `require_project`, and `get_redis` for every test. The overridden `require_project` returns a pre-built `ApiContext` — no auth roundtrip.
-- **Redis `FLUSHDB`** runs at the end of every test so rate-limiter counters, eval locks, and usage counters don't bleed across tests.
+- **`autouse` dep overrides** replace `get_db_session` and `require_project` for every test. The overridden `require_project` returns a pre-built `ApiContext` — no auth roundtrip.
 
-If you need a test that exercises auth resolution itself (not bypassing it), override only `get_db_session` and `get_redis` and let `require_project` run for real.
+If you need a test that exercises auth resolution itself (not bypassing it), override only `get_db_session` and let `require_project` run for real.
 
 ## Conventions
 
@@ -102,4 +95,4 @@ If you need a test that exercises auth resolution itself (not bypassing it), ove
 - `tests/*` get `D100`/`D103`/`D104` waived; `__init__.py` files get `E402`/`D104` waived.
 - API keys are stored hashed (`registry/security.py::hash_api_key`); never log or persist the raw key — only the prefix shown in `IdentityRepository`.
 - New tables / column changes require an Alembic migration **and** an updated ORM model. `migration` runs autogenerate against the local Postgres on `:5432` — bring up `make up` (or just the postgres service) first.
-- The only required runtime env vars in dev are Postgres/Redis connection vars; LLM, Stripe, Resend, Attio, PostHog keys are all optional and the corresponding services no-op when unset (`is_configured()` checks).
+- The only required runtime env vars in dev are PostgreSQL connection vars; LLM, Stripe, Resend, Attio, PostHog keys are all optional and the corresponding services no-op when unset (`is_configured()` checks).

@@ -202,18 +202,14 @@ async def _resolve_jwt(
     analytics = AnalyticsService()
 
     if is_new_user:
-        from app.infrastructure.queue.tasks import (
-            send_followup_email_task,
-            send_welcome_email_task,
-            sync_new_user_to_crm,
-        )
+        from app.infrastructure.local_tasks.queue import enqueue_registered_job
 
         if EmailService.is_configured():
-            send_welcome_email_task.delay(user.email)
-            send_followup_email_task.delay(user.email)
+            await enqueue_registered_job("send_welcome_email", {"email": user.email})
+            await enqueue_registered_job("send_followup_email", {"email": user.email})
 
         if CrmService.is_configured():
-            sync_new_user_to_crm.delay(user.email)
+            await enqueue_registered_job("sync_new_user_to_crm", {"email": user.email})
 
         analytics.user_signed_up(
             org_id=str(organization.id),

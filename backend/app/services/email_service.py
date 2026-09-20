@@ -1,8 +1,8 @@
 """Transactional email service powered by Resend.
 
 Encapsulates all Resend-specific logic: API configuration, HTML template
-rendering, and scheduled sending.  Designed to be called from Celery
-tasks so that email dispatch never blocks the request thread.
+rendering, and scheduled sending.  Local task handlers call it off the
+FastAPI event loop so email dispatch never blocks requests.
 
 When ``RESEND_API_KEY`` is empty (the default for self-hosted
 deployments), every public method is a silent no-op.

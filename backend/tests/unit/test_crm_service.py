@@ -1,4 +1,4 @@
-"""Unit tests for the CRM service and Celery task (no network required)."""
+"""Unit tests for the CRM service and local task handler (no network required)."""
 
 from unittest.mock import MagicMock, patch
 
@@ -160,13 +160,14 @@ def test_sync_contact_raises_on_list_entry_failure(
 
 
 # ---------------------------------------------------------------------------
-# Celery task
+# Local task handler
 # ---------------------------------------------------------------------------
 
 
 @patch("app.services.crm_service.httpx")
 @patch("app.services.crm_service.settings")
-def test_celery_task_syncs_contact(
+@pytest.mark.asyncio
+async def test_local_task_syncs_contact(
     mock_settings: MagicMock,
     mock_httpx: MagicMock,
 ) -> None:
@@ -178,9 +179,9 @@ def test_celery_task_syncs_contact(
     mock_httpx.put.return_value = put_resp
     mock_httpx.post.return_value = MagicMock()
 
-    from app.infrastructure.queue.tasks import sync_new_user_to_crm
+    from app.infrastructure.local_tasks.handlers import sync_new_user_to_crm
 
-    result = sync_new_user_to_crm("user@example.com")
+    result = await sync_new_user_to_crm("user@example.com")
 
     assert result["status"] == "synced"
     mock_httpx.put.assert_called_once()
@@ -188,13 +189,14 @@ def test_celery_task_syncs_contact(
 
 
 @patch("app.services.crm_service.settings")
-def test_celery_task_skips_when_unconfigured(mock_settings: MagicMock) -> None:
+@pytest.mark.asyncio
+async def test_local_task_skips_when_unconfigured(mock_settings: MagicMock) -> None:
     mock_settings.ATTIO_API_KEY = ""
     mock_settings.ATTIO_LIST_ID = ""
 
-    from app.infrastructure.queue.tasks import sync_new_user_to_crm
+    from app.infrastructure.local_tasks.handlers import sync_new_user_to_crm
 
-    result = sync_new_user_to_crm("user@example.com")
+    result = await sync_new_user_to_crm("user@example.com")
 
     assert result["status"] == "skipped"
     assert result["reason"] == "attio_not_configured"

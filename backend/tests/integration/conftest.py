@@ -1,8 +1,7 @@
-"""Integration test fixtures: real database, Redis compatibility, and local task runner.
+"""Integration test fixtures: real database and local task runner.
 
 The test stack mirrors dev/prod as closely as possible:
 - **PostgreSQL** on port 5433 (``docker-compose.test.yml``)
-- **Redis** on port 6380 for the remaining Celery compatibility paths
 - **LocalTaskRunner** executes durable ``local_jobs`` in the test process.
 
 The runner opens its own DB sessions and commits independently, just like
@@ -20,7 +19,6 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
-import redis.asyncio as aioredis
 import structlog
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine, text
@@ -35,7 +33,6 @@ from app.infrastructure.db.models import Base, OrganizationModel, ProjectModel
 from app.infrastructure.db.repositories.billing_repo import BillingRepository
 from app.infrastructure.db.repositories.trace_repo import TraceRepository
 from app.infrastructure.local_tasks.runner import local_task_runner
-from app.infrastructure.redis.client import get_redis
 from app.main import app
 from app.registry.constants import SpanKind, SpanStatusCode, SubscriptionPlan, TraceStatus
 from app.registry.settings import settings
@@ -187,24 +184,11 @@ async def _override_deps(
             logger=structlog.get_logger(),
         )
 
-    async def _get_redis():
-        client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-        try:
-            yield client
-        finally:
-            await client.aclose()
-
     app.dependency_overrides[get_db_session] = _get_db_session
     app.dependency_overrides[require_project] = _require_project
-    app.dependency_overrides[get_redis] = _get_redis
     await local_task_runner.start()
     yield
     await local_task_runner.stop()
-    flush_redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-    try:
-        await flush_redis.flushdb()
-    finally:
-        await flush_redis.aclose()
     app.dependency_overrides.clear()
 
 

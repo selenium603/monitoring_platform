@@ -17,6 +17,7 @@ class LocalTaskRunner:
     def __init__(self) -> None:
         self._runner_task: asyncio.Task[None] | None = None
         self._stopping = False
+        self._last_task_started_at: dict[str, datetime] = {}
 
     async def start(self) -> None:
         """Recover interrupted jobs and start the polling loop."""
@@ -90,6 +91,8 @@ class LocalTaskRunner:
             timeout_seconds = definition.timeout_seconds
 
         try:
+            await self._wait_for_task_rate_limit(job.task_name)
+            self._last_task_started_at[job.task_name] = datetime.now(timezone.utc)
             if timeout_seconds is None:
                 await definition.handler(job.payload)
             else:
@@ -109,7 +112,7 @@ class LocalTaskRunner:
             await self._fail_eval_run(job, message)
 
         if job.attempts <= job.max_retries:
-            available_at = datetime.now(timezone.utc) + timedelta(seconds=job.retry_delay_seconds)
+            available_at = datetime.now(timezone.utc) + timedelta(seconds=self._retry_delay_seconds(job))
             await self._schedule_retry(job.id, available_at=available_at, error=message)
             logger.warning(
                 "local_job_retry_scheduled",
@@ -136,7 +139,7 @@ class LocalTaskRunner:
             await self._fail_eval_run(job, message)
 
         if definition.retry_on_timeout and job.attempts <= job.max_retries:
-            available_at = datetime.now(timezone.utc) + timedelta(seconds=job.retry_delay_seconds)
+            available_at = datetime.now(timezone.utc) + timedelta(seconds=self._retry_delay_seconds(job))
             await self._schedule_retry(job.id, available_at=available_at, error=message)
             logger.warning(
                 "local_job_timeout_retry_scheduled",
@@ -150,12 +153,37 @@ class LocalTaskRunner:
         logger.error("local_job_timeout", job_id=str(job.id), task_name=job.task_name, error=message)
 
     async def _fail_eval_run(self, job: LocalJobModel, message: str) -> None:
-        from app.infrastructure.queue.tasks import _fail_eval_run
+        from app.infrastructure.local_tasks.handlers import fail_eval_run
 
         run_id = job.payload.get("run_id")
         if run_id is None:
             return
-        await _fail_eval_run(str(run_id), message)
+        await fail_eval_run(str(run_id), message)
+
+    async def _wait_for_task_rate_limit(self, task_name: str) -> None:
+        definition = TASK_DEFINITIONS.get(task_name)
+        if definition is None or definition.min_interval_seconds is None:
+            return
+
+        last_started_at = self._last_task_started_at.get(task_name)
+        if last_started_at is None:
+            return
+
+        elapsed = (datetime.now(timezone.utc) - last_started_at).total_seconds()
+        remaining = definition.min_interval_seconds - elapsed
+        if remaining > 0:
+            await asyncio.sleep(remaining)
+
+    @staticmethod
+    def _retry_delay_seconds(job: LocalJobModel) -> float:
+        definition = TASK_DEFINITIONS.get(job.task_name)
+        if definition is None or not definition.retry_backoff:
+            return float(job.retry_delay_seconds)
+
+        delay = float(job.retry_delay_seconds) * (2 ** max(job.attempts - 1, 0))
+        if definition.retry_backoff_max_seconds is not None:
+            delay = min(delay, float(definition.retry_backoff_max_seconds))
+        return delay
 
     async def _mark_completed(self, job_id: UUID) -> None:
         async with async_session_factory() as session:

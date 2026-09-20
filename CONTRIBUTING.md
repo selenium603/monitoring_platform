@@ -41,7 +41,7 @@ Edit each `.env.development` file with any required credentials.
 The fastest way to get everything running with hot reload:
 
 ```bash
-make up         # Build & start all services (API, worker, frontend, PostgreSQL, Redis)
+make up         # Build & start all services (API, frontend, PostgreSQL)
 make down       # Stop all services
 make restart    # Restart all services
 ```
@@ -56,7 +56,6 @@ Once running, open:
 ```bash
 make logs            # Tail all service logs
 make logs-app        # Tail backend logs only
-make logs-worker     # Tail worker logs only
 make logs-frontend   # Tail frontend logs only
 make ps              # Show running containers
 ```
@@ -67,10 +66,9 @@ If you prefer running the backend and frontend directly on your host:
 
 ```bash
 make dev        # Run backend API server + frontend dev server
-make worker     # Run Celery worker
 ```
 
-> PostgreSQL and Redis still need to be available (either via Docker or locally installed).
+> PostgreSQL still needs to be available (either via Docker or locally installed).
 
 ## Code Quality
 
@@ -88,7 +86,7 @@ CI will reject PRs that have lint errors or unformatted code.
 
 ```bash
 make test-unit          # Run all unit tests (backend + frontend)
-make test-integration   # Run backend integration tests (spins up test PostgreSQL + Redis)
+make test-integration   # Run backend integration tests (spins up test PostgreSQL)
 make test-all           # Run everything (unit + integration + E2E)
 ```
 

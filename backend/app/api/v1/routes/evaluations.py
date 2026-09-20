@@ -1,8 +1,8 @@
 """Routes for evaluation runs, trace scores, and analytics.
 
 Eval runs execute **asynchronously**: POST creates the job and returns
-``202 Accepted``.  The local durable job runner (or the remaining Celery
-worker compatibility path) runs the metrics and writes trace scores. Use GET
+``202 Accepted``.  The local durable job runner runs the metrics and writes
+trace scores. Use GET
 endpoints to poll progress or retrieve results.
 
 Authentication: Bearer JWT (with ``X-Project-ID`` header) **or**
@@ -455,7 +455,7 @@ async def create_eval_run(
     """Create a filtered eval run.
 
     Resolves traces matching the provided filters, optionally samples
-    a fraction of them, then dispatches a background Celery task to
+    a fraction of them, then dispatches a durable local background task to
     run the requested metrics asynchronously via an LLM judge.
 
     **Request body fields:**
@@ -524,7 +524,7 @@ async def create_batch_eval_run(
 
     Evaluates exactly the provided traces with all requested metrics.
     All metrics for all traces are processed in a single sequential
-    Celery task -- no race conditions on concurrent writes.
+    local job -- no race conditions on concurrent writes.
 
     Auth: ``Bearer`` + ``X-Project-ID`` | ``X-API-Key`` + ``X-Project-Name``
 
@@ -1001,7 +1001,7 @@ async def create_session_eval_run(
     """Create a filter-based session eval run.
 
     Resolves sessions matching the provided filters, then dispatches a
-    background Celery task that computes trace-level signals and
+    durable local background task that computes trace-level signals and
     aggregates them into session-level metrics.
 
     Auth: ``Bearer`` + ``X-Project-ID`` | ``X-API-Key`` + ``X-Project-Name``

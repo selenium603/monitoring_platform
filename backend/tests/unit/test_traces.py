@@ -69,7 +69,7 @@ def test_trace_with_nested_spans() -> None:
 
 
 def test_trace_serialization_roundtrip() -> None:
-    """Ensure a trace survives JSON serialisation (used by Celery)."""
+    """Ensure a trace survives JSON serialisation for a durable local job."""
     now = datetime.now(timezone.utc)
     trace = Trace(
         trace_id=uuid4(),

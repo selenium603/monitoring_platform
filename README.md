@@ -86,9 +86,7 @@ sequenceDiagram
     participant Trace as 🫆 Trace Service
     participant Eval as 🧪 Eval Service
     participant DB as 🗄️ PostgreSQL
-    participant Redis as 📮 Redis
     participant LocalRunner as ⚙️ Local Task Runner
-    participant Worker as ⚙️ Celery Worker
     participant LLM as 🤖 LLM Engine (LiteLLM)
 
     Note over Client,API: Management Plane (Bearer token)
@@ -133,9 +131,7 @@ sequenceDiagram
 |---|---|---|
 | **frontend** | Next.js dashboard | 3000 |
 | **app** | FastAPI application server | 8000 |
-| **worker** | Celery background worker | — |
 | **postgres** | PostgreSQL 16 | 5432 |
-| **redis** | Redis 7 (broker + cache) | 6379 |
 
 ## Contributing
 

@@ -1,53 +1,17 @@
-"""Celery task definitions for background processing.
+"""Local durable task handlers for background processing.
 
-Each task runs inside the worker process.  Because Celery workers are
-synchronous by default, we use ``asyncio.run()`` to bridge into the
-async SQLAlchemy session.
+Handlers run on the FastAPI event loop and open their own database session.
 
-Two task families:
-- **process_trace** -- persist an ingested trace to PostgreSQL.
-- **execute_eval_run** -- run metrics against a batch of traces and
-  persist trace scores.
-
-**Why NullPool?**  Each ``asyncio.run()`` call creates a new event loop.
-A pooled engine holds connections bound to the previous loop, causing
-``"attached to a different loop"`` errors on the next task.  ``NullPool``
-creates a fresh connection per session and discards it immediately,
-avoiding cross-loop contamination.
+The durable local runner invokes these functions directly. Trace ingestion,
+evaluation, billing, housekeeping, email, and CRM work all use the shared
+PostgreSQL session factory.
 """
 
 import asyncio
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
 from typing import Any
 
-from celery.exceptions import SoftTimeLimitExceeded
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
-
-from app.infrastructure.queue.celery_app import celery
+from app.infrastructure.db.engine import async_session_factory
 from app.logging import logger
-from app.registry.exceptions import QuotaExceededError
-from app.registry.settings import settings
-
-_worker_engine = create_async_engine(settings.DATABASE_URL, poolclass=NullPool)
-_worker_session_factory = async_sessionmaker(
-    bind=_worker_engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
-
-
-@asynccontextmanager
-async def _worker_session() -> AsyncGenerator:
-    """Yield an async session safe for Celery workers.
-
-    Uses a module-level ``NullPool`` engine — safe across event loops
-    because NullPool holds zero idle connections.  Each session opens
-    a fresh TCP connection and closes it on exit.
-    """
-    async with _worker_session_factory() as session:
-        yield session
 
 
 # ---------------------------------------------------------------------------
@@ -55,36 +19,14 @@ async def _worker_session() -> AsyncGenerator:
 # ---------------------------------------------------------------------------
 
 
-@celery.task(name="process_trace", bind=True, max_retries=3, default_retry_delay=5)
-def process_trace(self: Any, payload: dict[str, Any]) -> dict[str, str]:
-    """Deserialise a trace payload and persist it to PostgreSQL.
-
-    Args:
-        self: Celery task instance (injected by ``bind=True``).
-        payload: JSON-serialisable dict produced by ``Trace.model_dump(mode='json')``.
-
-    Returns:
-        A dict with ``trace_id`` and ``status`` for result inspection.
-    """
-    try:
-        return asyncio.run(_persist_trace(payload))
-    except SoftTimeLimitExceeded:
-        # Retrying a timeout just burns the limit again (max_retries + 1 times).
-        logger.error("process_trace_timeout", trace_id=payload.get("trace_id"))
-        raise
-    except Exception as exc:
-        logger.error("process_trace_failed", error=str(exc), trace_id=payload.get("trace_id"))
-        raise self.retry(exc=exc)
-
-
-async def _persist_trace(payload: dict[str, Any]) -> dict[str, str]:
+async def persist_trace(payload: dict[str, Any]) -> dict[str, str]:
     """Async helper that opens a DB session and saves the trace."""
     from app.core.traces.entities import Trace
     from app.infrastructure.db.repositories.trace_repo import TraceRepository
 
     trace = Trace.model_validate(payload)
 
-    async with _worker_session() as session:
+    async with async_session_factory() as session:
         repo = TraceRepository(session)
         await repo.upsert_trace(trace)
         await session.commit()
@@ -98,20 +40,7 @@ async def _persist_trace(payload: dict[str, Any]) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-_EVAL_SOFT_TIME_LIMIT = 3300  # 55 min
-_EVAL_TIME_LIMIT = 3600  # 60 min
-
-
-@celery.task(
-    name="execute_eval_run",
-    bind=True,
-    max_retries=2,
-    default_retry_delay=10,
-    soft_time_limit=_EVAL_SOFT_TIME_LIMIT,
-    time_limit=_EVAL_TIME_LIMIT,
-)
-def execute_eval_run(
-    self: Any,
+async def run_eval_run(
     run_id: str,
     project_id: str,
     trace_ids: list[str],
@@ -124,7 +53,6 @@ def execute_eval_run(
     PENDING -> RUNNING -> COMPLETED/FAILED.
 
     Args:
-        self: Celery task instance.
         run_id: UUID of the eval run.
         project_id: UUID of the owning project.
         trace_ids: List of trace UUID strings to evaluate.
@@ -136,25 +64,6 @@ def execute_eval_run(
     Returns:
         A dict summarising the eval run outcome.
     """
-    try:
-        return asyncio.run(_run_eval_run(run_id, project_id, trace_ids, trace_metric_map))
-    except SoftTimeLimitExceeded:
-        logger.error("execute_eval_run_timeout", run_id=run_id)
-        asyncio.run(_fail_eval_run(run_id, "Eval run exceeded its time limit."))
-        raise
-    except Exception as exc:
-        logger.error("execute_eval_run_failed", error=str(exc), run_id=run_id)
-        asyncio.run(_fail_eval_run(run_id, str(exc)))
-        raise self.retry(exc=exc)
-
-
-async def _run_eval_run(
-    run_id: str,
-    project_id: str,
-    trace_ids: list[str],
-    trace_metric_map: dict[str, list[str]] | None = None,
-) -> dict[str, str]:
-    """Core async logic for executing an eval run."""
     from datetime import datetime, timezone
     from uuid import UUID, uuid4
 
@@ -171,7 +80,7 @@ async def _run_eval_run(
 
     llm = LLMEngine()
 
-    async with _worker_session() as session:
+    async with async_session_factory() as session:
         eval_repo = EvalRepository(session)
         trace_repo = TraceRepository(session)
 
@@ -266,7 +175,7 @@ async def _run_eval_run(
     return {"run_id": run_id, "status": "completed"}
 
 
-async def _fail_eval_run(run_id: str, error_message: str) -> None:
+async def fail_eval_run(run_id: str, error_message: str) -> None:
     """Mark an eval run as FAILED on unrecoverable errors."""
     from uuid import UUID
 
@@ -274,7 +183,7 @@ async def _fail_eval_run(run_id: str, error_message: str) -> None:
     from app.registry.constants import EvaluationStatus
 
     try:
-        async with _worker_session() as session:
+        async with async_session_factory() as session:
             repo = EvalRepository(session)
             await repo.update_run_status(UUID(run_id), EvaluationStatus.FAILED, error_message=error_message)
             await session.commit()
@@ -287,21 +196,8 @@ async def _fail_eval_run(run_id: str, error_message: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-@celery.task(name="check_eval_monitors", bind=True, max_retries=0)
-def check_eval_monitors(self: Any) -> dict[str, Any]:
-    """Periodic tick: query due monitors and fan out into per-monitor sub-tasks.
-
-    This is a lightweight dispatcher. It queries due monitors, advances their
-    next-run timestamps, then persists one local job per monitor.
-    """
-    try:
-        return asyncio.run(_check_eval_monitors())
-    except Exception as exc:
-        logger.error("check_eval_monitors_failed", error=str(exc))
-        return {"error": str(exc)}
-
-
-async def _check_eval_monitors() -> dict[str, Any]:
+async def check_eval_monitors() -> dict[str, Any]:
+    """Query due monitors, reschedule them, and enqueue local jobs."""
     from datetime import datetime, timezone
 
     from app.core.evals.cadence import compute_next_run
@@ -312,7 +208,7 @@ async def _check_eval_monitors() -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     monitors_to_dispatch: list[tuple[str, str]] = []
 
-    async with _worker_session() as session:
+    async with async_session_factory() as session:
         eval_repo = EvalRepository(session)
         due_monitors = await eval_repo.get_due_monitors(now)
 
@@ -341,30 +237,11 @@ async def _check_eval_monitors() -> dict[str, Any]:
     return summary
 
 
-@celery.task(name="process_single_monitor", bind=True, max_retries=2, default_retry_delay=30)
-def process_single_monitor(self: Any, monitor_id: str, project_id: str) -> dict[str, str]:
+async def process_single_monitor(monitor_id: str, project_id: str) -> dict[str, str]:
     """Process a single due monitor: check for new data, spawn an eval run if needed.
 
-    Runs as an independent task so multiple monitors execute in parallel
-    across all available worker slots.
+    Runs as an independent durable local job.
     """
-    try:
-        return asyncio.run(_process_single_monitor(monitor_id, project_id))
-    except QuotaExceededError:
-        logger.warning(
-            "process_single_monitor_quota_exceeded",
-            monitor_id=monitor_id,
-        )
-        return {"monitor_id": monitor_id, "status": "quota_exceeded"}
-    except SoftTimeLimitExceeded:
-        logger.error("process_single_monitor_timeout", monitor_id=monitor_id)
-        raise
-    except Exception as exc:
-        logger.error("process_single_monitor_failed", monitor_id=monitor_id, error=str(exc))
-        raise self.retry(exc=exc)
-
-
-async def _process_single_monitor(monitor_id: str, project_id: str) -> dict[str, str]:
     from datetime import datetime, timezone
     from uuid import UUID
 
@@ -377,7 +254,7 @@ async def _process_single_monitor(monitor_id: str, project_id: str) -> dict[str,
     mid = UUID(monitor_id)
     pid = UUID(project_id)
 
-    async with _worker_session() as session:
+    async with async_session_factory() as session:
         eval_repo = EvalRepository(session)
         svc = EvalService(session)
 
@@ -431,16 +308,7 @@ async def _process_single_monitor(monitor_id: str, project_id: str) -> dict[str,
 SIGNAL_METRICS = ["confidence", "coherence", "loop_detection", "tool_correctness"]
 
 
-@celery.task(
-    name="execute_session_eval_run",
-    bind=True,
-    max_retries=2,
-    default_retry_delay=10,
-    soft_time_limit=_EVAL_SOFT_TIME_LIMIT,
-    time_limit=_EVAL_TIME_LIMIT,
-)
-def execute_session_eval_run(
-    self: Any,
+async def run_session_eval(
     run_id: str,
     project_id: str,
     session_ids: list[str],
@@ -451,23 +319,6 @@ def execute_session_eval_run(
     trace-level signals (persisting each as a TraceScore), then passes
     the precomputed signals to session metrics for pure aggregation.
     """
-    try:
-        return asyncio.run(_run_session_eval(run_id, project_id, session_ids))
-    except SoftTimeLimitExceeded:
-        logger.error("execute_session_eval_run_timeout", run_id=run_id)
-        asyncio.run(_fail_eval_run(run_id, "Session eval run exceeded its time limit."))
-        raise
-    except Exception as exc:
-        logger.error("execute_session_eval_run_failed", error=str(exc), run_id=run_id)
-        asyncio.run(_fail_eval_run(run_id, str(exc)))
-        raise self.retry(exc=exc)
-
-
-async def _run_session_eval(
-    run_id: str,
-    project_id: str,
-    session_ids: list[str],
-) -> dict[str, str]:
     """Core async logic for executing a session eval run."""
     from datetime import datetime, timezone
     from uuid import UUID, uuid4
@@ -498,7 +349,7 @@ async def _run_session_eval(
 
     llm = LLMEngine()
 
-    async with _worker_session() as session:
+    async with async_session_factory() as session:
         eval_repo = EvalRepository(session)
 
         # Phase 0 -- Setup
@@ -763,33 +614,22 @@ async def _run_session_eval(
 
 
 # ---------------------------------------------------------------------------
-# Billing tasks (dispatcher + per-org worker pattern)
+# Billing tasks (dispatcher + per-organization job pattern)
 #
 # Each periodic task is a lightweight dispatcher that queries eligible org
-# IDs, then fans out one durable local job per org. Celery wrappers remain for
-# event-driven tasks during this migration, but scheduled fan-out no longer
-# uses the Redis broker.
+# IDs, then fans out one durable local job per organization.
 # ---------------------------------------------------------------------------
 
 
 # -- Overage billing ----------------------------------------------------------
 
 
-@celery.task(name="dispatch_overage_billing", bind=True, max_retries=0)
-def dispatch_overage_billing(self: Any) -> dict[str, Any]:
+async def dispatch_overage_billing() -> dict[str, Any]:
     """Dispatcher: query paid org IDs and fan out billing tasks."""
-    try:
-        return asyncio.run(_dispatch_overage_billing())
-    except Exception as exc:
-        logger.error("dispatch_overage_billing_failed", error=str(exc))
-        return {"error": str(exc)}
-
-
-async def _dispatch_overage_billing() -> dict[str, Any]:
     from app.infrastructure.db.repositories.billing_repo import BillingRepository
     from app.infrastructure.local_tasks.queue import enqueue_registered_job
 
-    async with _worker_session() as session:
+    async with async_session_factory() as session:
         org_ids = await BillingRepository(session).list_paid_active_org_ids()
 
     for oid in org_ids:
@@ -802,38 +642,17 @@ async def _dispatch_overage_billing() -> dict[str, Any]:
     return {"status": "dispatched", "count": len(org_ids)}
 
 
-@celery.task(
-    name="bill_single_org",
-    bind=True,
-    max_retries=2,
-    default_retry_delay=15,
-    rate_limit="80/s",
-)
-def bill_single_org(self: Any, org_id_str: str) -> dict[str, str]:
-    """Worker: lock the subscription, compute the DB delta, and report to Stripe.
+async def bill_single_org(org_id_str: str) -> dict[str, str]:
+    """Lock the subscription, compute the DB delta, and report to Stripe.
 
-    ``rate_limit="80/s"`` keeps the total Stripe API call rate across
-    all workers safely below Stripe's 100 req/s live-mode limit.
+    The local runner limits retries and preserves one-job-at-a-time execution.
     """
-    from app.services.billing_service import StripeNotConfiguredError
-
-    try:
-        return asyncio.run(_bill_single_org(org_id_str))
-    except StripeNotConfiguredError as exc:
-        logger.error("bill_single_org_misconfigured", org_id=org_id_str, error=str(exc))
-        return {"org_id": org_id_str, "status": "stripe_not_configured"}
-    except Exception as exc:
-        logger.error("bill_single_org_failed", org_id=org_id_str, error=str(exc))
-        raise self.retry(exc=exc)
-
-
-async def _bill_single_org(org_id_str: str) -> dict[str, str]:
     from uuid import UUID
 
     from app.services.billing_service import BillingService
 
     org_id = UUID(org_id_str)
-    async with _worker_session() as session:
+    async with async_session_factory() as session:
         billing_svc = BillingService(session)
         if not await billing_svc.try_acquire_overage_lock(org_id):
             logger.info("bill_single_org_skipped_locked", org_id=org_id_str)
@@ -852,24 +671,15 @@ async def _bill_single_org(org_id_str: str) -> dict[str, str]:
 # -- HOBBY period reset -------------------------------------------------------
 
 
-@celery.task(name="dispatch_hobby_reset", bind=True, max_retries=0)
-def dispatch_hobby_reset(self: Any) -> dict[str, Any]:
+async def dispatch_hobby_reset() -> dict[str, Any]:
     """Dispatcher: query HOBBY org IDs due for reset and fan out tasks."""
-    try:
-        return asyncio.run(_dispatch_hobby_reset())
-    except Exception as exc:
-        logger.error("dispatch_hobby_reset_failed", error=str(exc))
-        return {"error": str(exc)}
-
-
-async def _dispatch_hobby_reset() -> dict[str, Any]:
     from datetime import datetime, timezone
 
     from app.infrastructure.db.repositories.billing_repo import BillingRepository
     from app.infrastructure.local_tasks.queue import enqueue_registered_job
 
     now = datetime.now(timezone.utc)
-    async with _worker_session() as session:
+    async with async_session_factory() as session:
         org_ids = await BillingRepository(session).list_hobby_org_ids_due_for_reset(now)
 
     for oid in org_ids:
@@ -882,24 +692,15 @@ async def _dispatch_hobby_reset() -> dict[str, Any]:
     return {"status": "dispatched", "count": len(org_ids)}
 
 
-@celery.task(name="reset_single_hobby_org", bind=True, max_retries=2, default_retry_delay=10)
-def reset_single_hobby_org(self: Any, org_id_str: str) -> dict[str, str]:
-    """Worker: advance the billing period for one HOBBY organization."""
-    try:
-        return asyncio.run(_reset_single_hobby_org(org_id_str))
-    except Exception as exc:
-        logger.error("reset_single_hobby_org_failed", org_id=org_id_str, error=str(exc))
-        raise self.retry(exc=exc)
-
-
-async def _reset_single_hobby_org(org_id_str: str) -> dict[str, str]:
+async def reset_single_hobby_org(org_id_str: str) -> dict[str, str]:
+    """Advance the billing period for one HOBBY organization."""
     from datetime import timedelta
     from uuid import UUID
 
     from app.infrastructure.db.repositories.billing_repo import BillingRepository
 
     org_id = UUID(org_id_str)
-    async with _worker_session() as session:
+    async with async_session_factory() as session:
         billing_repo = BillingRepository(session)
         sub = await billing_repo.get_subscription_by_org(org_id)
         if sub is None:
@@ -920,51 +721,52 @@ async def _reset_single_hobby_org(org_id_str: str) -> dict[str, str]:
 # Email – welcome sequence
 # ---------------------------------------------------------------------------
 
-_email_task_opts = dict(
-    autoretry_for=(Exception,),
-    retry_backoff=True,
-    retry_backoff_max=600,
-    max_retries=3,
-    rate_limit="2/s",
-)
-
-
-@celery.task(name="send_welcome_email", **_email_task_opts)
-def send_welcome_email_task(email: str) -> dict[str, str]:
-    """Schedule a welcome email via Resend for a new signup."""
+async def send_welcome_email(email: str) -> dict[str, str]:
+    """Send a welcome email without blocking the FastAPI event loop."""
     from app.services.email_service import EmailService
 
     svc = EmailService()
-    if not svc.is_configured():
+    if not await asyncio.to_thread(svc.is_configured):
         return {"status": "skipped", "reason": "resend_not_configured"}
 
-    svc.send_welcome_email(to=email)
+    await asyncio.to_thread(svc.send_welcome_email, to=email)
     return {"status": "sent", "email": email}
 
 
-@celery.task(name="send_followup_email", **_email_task_opts)
-def send_followup_email_task(email: str) -> dict[str, str]:
-    """Schedule a follow-up email via Resend for a new signup."""
+async def send_followup_email(email: str) -> dict[str, str]:
+    """Send a follow-up email without blocking the FastAPI event loop."""
     from app.services.email_service import EmailService
 
     svc = EmailService()
-    if not svc.is_configured():
+    if not await asyncio.to_thread(svc.is_configured):
         return {"status": "skipped", "reason": "resend_not_configured"}
 
-    svc.send_followup_email(to=email)
+    await asyncio.to_thread(svc.send_followup_email, to=email)
     return {"status": "sent", "email": email}
 
 
-@celery.task(name="send_invitation_email", **_email_task_opts)
-def send_invitation_email_task(to: str, org_name: str, inviter_name: str, role: str, app_url: str) -> dict[str, str]:
-    """Send an invitation notification email via Resend."""
+async def send_invitation_email(
+    to: str,
+    org_name: str,
+    inviter_name: str,
+    role: str,
+    app_url: str,
+) -> dict[str, str]:
+    """Send an invitation notification email without blocking the event loop."""
     from app.services.email_service import EmailService
 
     svc = EmailService()
-    if not svc.is_configured():
+    if not await asyncio.to_thread(svc.is_configured):
         return {"status": "skipped", "reason": "resend_not_configured"}
 
-    svc.send_invitation_email(to=to, org_name=org_name, inviter_name=inviter_name, role=role, app_url=app_url)
+    await asyncio.to_thread(
+        svc.send_invitation_email,
+        to=to,
+        org_name=org_name,
+        inviter_name=inviter_name,
+        role=role,
+        app_url=app_url,
+    )
     return {"status": "sent", "email": to}
 
 
@@ -973,10 +775,10 @@ def send_invitation_email_task(to: str, org_name: str, inviter_name: str, role: 
 # ---------------------------------------------------------------------------
 
 
-async def _expire_stale_invitations() -> dict[str, Any]:
+async def expire_stale_invitations() -> dict[str, Any]:
     from app.infrastructure.db.repositories.invitation_repo import InvitationRepository
 
-    async with _worker_session() as session:
+    async with async_session_factory() as session:
         count = await InvitationRepository(session).expire_stale_invitations()
         await session.commit()
 
@@ -984,37 +786,19 @@ async def _expire_stale_invitations() -> dict[str, Any]:
     return {"status": "done", "expired": count}
 
 
-@celery.task(name="expire_stale_invitations", bind=True, max_retries=0)
-def expire_stale_invitations_task(self: Any) -> dict[str, Any]:
-    """Periodic: transition PENDING invitations past their expiry to EXPIRED."""
-    try:
-        return asyncio.run(_expire_stale_invitations())
-    except Exception as exc:
-        logger.error("expire_stale_invitations_failed", error=str(exc))
-        return {"error": str(exc)}
-
-
 # ---------------------------------------------------------------------------
 # CRM – Attio contact sync
 # ---------------------------------------------------------------------------
 
 
-@celery.task(
-    name="sync_new_user_to_crm",
-    autoretry_for=(Exception,),
-    retry_backoff=True,
-    retry_backoff_max=600,
-    max_retries=3,
-    rate_limit="2/s",
-)
-def sync_new_user_to_crm(email: str) -> dict[str, str]:
-    """Assert a person record in Attio and add them to the signups list."""
+async def sync_new_user_to_crm(email: str) -> dict[str, str]:
+    """Sync a new user to Attio without blocking the FastAPI event loop."""
     from app.services.crm_service import CrmService
 
     svc = CrmService()
-    if not svc.is_configured():
+    if not await asyncio.to_thread(svc.is_configured):
         logger.debug("attio_skip_unconfigured", email=email)
         return {"status": "skipped", "reason": "attio_not_configured"}
 
-    svc.sync_contact(email=email)
+    await asyncio.to_thread(svc.sync_contact, email=email)
     return {"status": "synced", "email": email}

@@ -12,14 +12,12 @@ ENV APP_ENV=${APP_ENV} \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
     PATH="/app/.venv/bin:$PATH"
 
-# System deps: libpq (psycopg2), curl (healthcheck), pg client + redis
-# tools (entrypoint connectivity checks)
+# System deps: libpq (psycopg2), curl (healthcheck), and pg client.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     curl \
     postgresql-client \
-    redis-tools \
     && pip install --upgrade pip \
     && pip install uv \
     && rm -rf /var/lib/apt/lists/*
@@ -43,5 +41,5 @@ EXPOSE 8000
 
 ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
 
-# Default: run the API server.  The worker service overrides CMD.
+# Run the API server; durable background jobs run inside this process.
 CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

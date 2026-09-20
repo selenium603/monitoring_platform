@@ -1,4 +1,4 @@
-.PHONY: install dev lint format migrate worker test-unit help
+.PHONY: install dev lint format migrate test-unit help
 
 # -- Installation & environment -----------------------------------------------
 
@@ -9,9 +9,6 @@ install:  ## Install locked dependencies via uv
 
 dev:  ## Run the API server locally (outside Docker)
 	APP_ENV=development uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-worker:  ## Run the Celery worker locally
-	APP_ENV=development uv run celery -A app.infrastructure.queue.celery_app worker --loglevel=info
 
 # -- Code quality -------------------------------------------------------------
 
