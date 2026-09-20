@@ -17,6 +17,7 @@ from app.api.rate_limit import limiter
 from app.api.v1.router import v1_router
 from app.infrastructure.redis.client import close_redis_pool
 from app.infrastructure.local_tasks.runner import local_task_runner
+from app.infrastructure.local_tasks.scheduler import local_scheduler
 from app.logging import logger
 from app.registry.exceptions import PandaProbeError
 from app.registry.settings import Environment, settings
@@ -50,6 +51,7 @@ async def lifespan(app: FastAPI):
     _warn_auth_disabled()
     AnalyticsService.initialize()
     await local_task_runner.start()
+    await local_scheduler.start()
     logger.info(
         "application_startup",
         project=settings.PROJECT_NAME,
@@ -59,6 +61,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await local_scheduler.stop()
         await local_task_runner.stop()
         AnalyticsService.shutdown()
         await close_redis_pool()
