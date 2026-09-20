@@ -50,43 +50,6 @@ async def _worker_session() -> AsyncGenerator:
         yield session
 
 
-#: How long a dispatcher holds its single-flight lock. Longer than any dispatch
-#: takes (~3s for ~500 orgs) but short enough that a killed worker cannot block
-#: the next scheduled cycle, which is 300s away for the usage/monitor schedules.
-_DISPATCH_LOCK_TTL = 120
-_DISPATCH_LOCK_PREFIX = "pp:dispatch-lock:"
-
-
-@asynccontextmanager
-async def _dispatch_once(name: str) -> AsyncGenerator[bool, None]:
-    """Yield True only for the first caller to claim ``name`` within the TTL.
-
-    Dispatchers fan out one task per organisation, so every duplicate dispatch
-    multiplies the queue by the org count. The observed case is recovery from a
-    worker outage: beat keeps queueing on its 300s schedule regardless, so a
-    6.6h wedge left 79 dispatch messages that all ran within two minutes of the
-    restart and fanned out ~3,000 usage-sync tasks against ~460 real orgs. This
-    collapses that thundering herd into one fan-out per TTL.
-
-    Fails OPEN — if Redis is unreachable we still dispatch, because dropping
-    usage sync silently is worse than dispatching twice. (Largely academic: the
-    lock shares Redis with the broker, so a dispatcher that cannot reach Redis
-    could not have received this task nor enqueued its children anyway.)
-    """
-    import redis.asyncio as aioredis
-
-    client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-    try:
-        claimed = bool(await client.set(f"{_DISPATCH_LOCK_PREFIX}{name}", "1", nx=True, ex=_DISPATCH_LOCK_TTL))
-    except Exception as exc:  # noqa: BLE001 - never let the lock itself break dispatch
-        logger.warning("dispatch_lock_unavailable", dispatcher=name, error=str(exc))
-        claimed = True
-    try:
-        yield claimed
-    finally:
-        await client.aclose()
-
-
 # ---------------------------------------------------------------------------
 # Trace persistence
 # ---------------------------------------------------------------------------
@@ -328,9 +291,8 @@ async def _fail_eval_run(run_id: str, error_message: str) -> None:
 def check_eval_monitors(self: Any) -> dict[str, Any]:
     """Periodic tick: query due monitors and fan out into per-monitor sub-tasks.
 
-    This is a lightweight dispatcher. It acquires a Redis lock, queries
-    for due monitors, then fires one ``process_single_monitor`` task per
-    monitor into the Celery queue for parallel execution across workers.
+    This is a lightweight dispatcher. It queries due monitors, advances their
+    next-run timestamps, then persists one local job per monitor.
     """
     try:
         return asyncio.run(_check_eval_monitors())
@@ -345,43 +307,33 @@ async def _check_eval_monitors() -> dict[str, Any]:
     from app.core.evals.cadence import compute_next_run
     from app.infrastructure.db.repositories.eval_repo import EvalRepository
 
-    import redis
+    from app.infrastructure.local_tasks.queue import enqueue_registered_job
 
-    redis_client = redis.from_url(settings.REDIS_URL)
-    try:
-        lock = redis_client.lock("check_eval_monitors", timeout=60)
-        if not lock.acquire(blocking=False):
-            logger.info("check_eval_monitors_skipped", reason="lock held by another worker")
-            return {"status": "skipped", "reason": "lock"}
+    now = datetime.now(timezone.utc)
+    monitors_to_dispatch: list[tuple[str, str]] = []
 
-        monitors_to_dispatch: list[tuple[str, str]] = []
-        try:
-            now = datetime.now(timezone.utc)
+    async with _worker_session() as session:
+        eval_repo = EvalRepository(session)
+        due_monitors = await eval_repo.get_due_monitors(now)
 
-            async with _worker_session() as session:
-                eval_repo = EvalRepository(session)
-                due_monitors = await eval_repo.get_due_monitors(now)
+        for monitor in due_monitors:
+            next_run = compute_next_run(monitor.cadence, now)
+            await eval_repo.reschedule_monitor(
+                monitor.id,
+                next_run_at=next_run,
+            )
+            monitors_to_dispatch.append((str(monitor.id), str(monitor.project_id)))
 
-                for monitor in due_monitors:
-                    next_run = compute_next_run(monitor.cadence, now)
-                    await eval_repo.reschedule_monitor(
-                        monitor.id,
-                        next_run_at=next_run,
-                    )
-                    monitors_to_dispatch.append((str(monitor.id), str(monitor.project_id)))
-
-                await session.commit()
-
-        finally:
-            try:
-                lock.release()
-            except Exception:
-                pass
-    finally:
-        redis_client.close()
+        await session.commit()
 
     for monitor_id, project_id in monitors_to_dispatch:
-        process_single_monitor.delay(monitor_id, project_id)
+        await enqueue_registered_job(
+            "process_single_monitor",
+            {
+                "monitor_id": monitor_id,
+                "project_id": project_id,
+            },
+        )
 
     dispatched = len(monitors_to_dispatch)
     summary = {"status": "completed", "dispatched": dispatched}
@@ -819,10 +771,10 @@ async def _run_session_eval(
 # ---------------------------------------------------------------------------
 # Usage sync & billing tasks  (dispatcher + per-org worker pattern)
 #
-# Each beat task is a lightweight *dispatcher* that queries eligible org
-# IDs, then fans out one Celery sub-task per org.  The sub-tasks run in
-# parallel across all available workers, each with its own DB session
-# and transaction, so one failure is isolated to a single org.
+# Each periodic task is a lightweight dispatcher that queries eligible org
+# IDs, then fans out one durable local job per org. Celery wrappers remain for
+# event-driven tasks during this migration, but scheduled fan-out no longer
+# uses the Redis broker.
 # ---------------------------------------------------------------------------
 
 
@@ -841,17 +793,16 @@ def dispatch_sync_usage(self: Any) -> dict[str, Any]:
 
 async def _dispatch_sync_usage() -> dict[str, Any]:
     from app.infrastructure.db.repositories.billing_repo import BillingRepository
+    from app.infrastructure.local_tasks.queue import enqueue_registered_job
 
-    async with _dispatch_once("sync_usage") as claimed:
-        if not claimed:
-            logger.info("dispatch_sync_usage_skipped_duplicate")
-            return {"status": "skipped_duplicate", "count": 0}
+    async with _worker_session() as session:
+        org_ids = await BillingRepository(session).list_all_active_org_ids()
 
-        async with _worker_session() as session:
-            org_ids = await BillingRepository(session).list_all_active_org_ids()
-
-        for oid in org_ids:
-            sync_single_org_usage.delay(str(oid))
+    for oid in org_ids:
+        await enqueue_registered_job(
+            "sync_single_org_usage",
+            {"org_id": str(oid)},
+        )
 
     logger.info("dispatch_sync_usage_done", dispatched=len(org_ids))
     return {"status": "dispatched", "count": len(org_ids)}
@@ -902,17 +853,16 @@ def dispatch_overage_billing(self: Any) -> dict[str, Any]:
 
 async def _dispatch_overage_billing() -> dict[str, Any]:
     from app.infrastructure.db.repositories.billing_repo import BillingRepository
+    from app.infrastructure.local_tasks.queue import enqueue_registered_job
 
-    async with _dispatch_once("overage_billing") as claimed:
-        if not claimed:
-            logger.info("dispatch_overage_billing_skipped_duplicate")
-            return {"status": "skipped_duplicate", "count": 0}
+    async with _worker_session() as session:
+        org_ids = await BillingRepository(session).list_paid_active_org_ids()
 
-        async with _worker_session() as session:
-            org_ids = await BillingRepository(session).list_paid_active_org_ids()
-
-        for oid in org_ids:
-            bill_single_org.delay(str(oid))
+    for oid in org_ids:
+        await enqueue_registered_job(
+            "bill_single_org",
+            {"org_id": str(oid)},
+        )
 
     logger.info("dispatch_overage_billing_done", dispatched=len(org_ids))
     return {"status": "dispatched", "count": len(org_ids)}
@@ -995,18 +945,17 @@ async def _dispatch_hobby_reset() -> dict[str, Any]:
     from datetime import datetime, timezone
 
     from app.infrastructure.db.repositories.billing_repo import BillingRepository
+    from app.infrastructure.local_tasks.queue import enqueue_registered_job
 
     now = datetime.now(timezone.utc)
-    async with _dispatch_once("hobby_reset") as claimed:
-        if not claimed:
-            logger.info("dispatch_hobby_reset_skipped_duplicate")
-            return {"status": "skipped_duplicate", "count": 0}
+    async with _worker_session() as session:
+        org_ids = await BillingRepository(session).list_hobby_org_ids_due_for_reset(now)
 
-        async with _worker_session() as session:
-            org_ids = await BillingRepository(session).list_hobby_org_ids_due_for_reset(now)
-
-        for oid in org_ids:
-            reset_single_hobby_org.delay(str(oid))
+    for oid in org_ids:
+        await enqueue_registered_job(
+            "reset_single_hobby_org",
+            {"org_id": str(oid)},
+        )
 
     logger.info("dispatch_hobby_reset_done", dispatched=len(org_ids))
     return {"status": "dispatched", "count": len(org_ids)}
