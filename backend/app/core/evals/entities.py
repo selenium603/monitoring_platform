@@ -1,0 +1,154 @@
+"""Domain entities for the Evaluation bounded context.
+
+An ``EvalRun`` is a batch job that applies one or more metrics to a
+filtered set of traces.  Each metric + trace pair produces a
+``TraceScore`` row in the database.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
+from uuid import UUID
+
+from pydantic import BaseModel, Field, field_validator
+
+from app.registry.constants import EvaluationStatus, ScoreDataType, ScoreSource, ScoreStatus
+
+
+def validate_score_value(value: str, data_type: ScoreDataType) -> None:
+    """Validate a score value for the given data_type. Raises ValueError if invalid."""
+    if data_type == ScoreDataType.NUMERIC:
+        try:
+            score = float(value)
+        except ValueError:
+            raise ValueError("NUMERIC score must be a valid number")
+        if not (0.0 <= score <= 1.0):
+            raise ValueError("NUMERIC score must be in [0.0, 1.0]")
+    elif data_type == ScoreDataType.BOOLEAN:
+        if value.lower() not in ("true", "false"):
+            raise ValueError("BOOLEAN score must be 'true' or 'false'")
+    # CATEGORICAL: no validation
+
+
+class TraceScore(BaseModel):
+    """A single score for a single trace."""
+
+    id: UUID
+    trace_id: UUID
+    project_id: UUID
+    name: str
+    data_type: ScoreDataType = ScoreDataType.NUMERIC
+    value: str | None
+    source: ScoreSource
+    status: ScoreStatus = ScoreStatus.SUCCESS
+    eval_run_id: UUID | None = None
+    author_user_id: str | None = None
+    reason: str | None = None
+    environment: str | None = None
+    config_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+    @field_validator("value")
+    @classmethod
+    def _validate_value(cls, v: str | None, info: Any) -> str | None:
+        if v is None:
+            return v
+        data_type = info.data.get("data_type", ScoreDataType.NUMERIC)
+        validate_score_value(v, data_type)
+        return v
+
+
+class SessionScore(BaseModel):
+    """A single evaluation score for a session (agent-level)."""
+
+    id: UUID
+    session_id: str
+    project_id: UUID
+    name: str
+    data_type: ScoreDataType = ScoreDataType.NUMERIC
+    value: str | None
+    source: ScoreSource
+    status: ScoreStatus = ScoreStatus.SUCCESS
+    eval_run_id: UUID | None = None
+    author_user_id: str | None = None
+    reason: str | None = None
+    environment: str | None = None
+    config_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+    @field_validator("value")
+    @classmethod
+    def _validate_value(cls, v: str | None, info: Any) -> str | None:
+        if v is None:
+            return v
+        data_type = info.data.get("data_type", ScoreDataType.NUMERIC)
+        validate_score_value(v, data_type)
+        return v
+
+
+class EvalRun(BaseModel):
+    """A batch evaluation job targeting a filtered set of traces.
+
+    Created with status PENDING, transitions to RUNNING while the
+    Celery worker processes it, and ends at COMPLETED or FAILED.
+    """
+
+    id: UUID
+    project_id: UUID
+    name: str | None = None
+    target_type: str = "TRACE"
+    metric_names: list[str]
+    filters: dict[str, Any] = Field(default_factory=dict)
+    sampling_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    model: str | None = None
+    monitor_id: UUID | None = None
+    status: EvaluationStatus = EvaluationStatus.PENDING
+    total_targets: int = 0
+    evaluated_count: int = 0
+    failed_count: int = 0
+    error_message: str | None = None
+    created_at: datetime
+    completed_at: datetime | None = None
+
+
+class EvalMonitor(BaseModel):
+    """A persistent evaluation schedule that spawns eval runs on a cadence."""
+
+    id: UUID
+    project_id: UUID
+    name: str
+    target_type: str
+    metric_names: list[str]
+    filters: dict[str, Any] = Field(default_factory=dict)
+    sampling_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    model: str | None = None
+    cadence: str
+    only_if_changed: bool = True
+    status: str
+    last_run_at: datetime | None = None
+    last_run_id: UUID | None = None
+    next_run_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass
+class PreparedRun:
+    """An eval run that has been validated and added to the DB session but not yet committed.
+
+    The caller is expected to perform quota checks between ``prepare_*``
+    and ``dispatch_run``.  If the quota check fails the session can be
+    rolled back and no Celery task will ever fire.
+    """
+
+    run: EvalRun
+    project_id: UUID
+    target_ids: list[str]
+    target_type: str
+    trace_metric_map: dict[str, list[str]] | None = field(default=None)

@@ -1,0 +1,474 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "PandaProbe",
+  "logo": {
+    "light": "/assets/logo/light.png",
+    "dark": "/assets/logo/dark.png"
+  },
+  "favicon": "/assets/logo/favicon.ico",
+  "colors": {
+    "primary": "#056196",
+    "light": "#056196",
+    "dark": "#056196"
+  },
+  "background": {
+    "color": {
+      "dark": "#0c0c0b"
+    }
+  },
+  "api": {
+    "playground": {
+      "display": "interactive"
+    },
+    "examples": {
+      "languages": [
+        "curl",
+        "python",
+        "javascript",
+        "go"
+      ],
+      "defaults": "required",
+      "prefill": true
+    }
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "mcp",
+      "cursor",
+      "vscode"
+    ],
+    "display": "header"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "icon": "github",
+        "href": "https://github.com/chirpz-ai/pandaprobe"
+      },
+      {
+        "label": "Discord",
+        "icon": "discord",
+        "href": "https://discord.gg/A2VfrRhx"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Try PandaProbe",
+      "href": "https://app.pandaprobe.com/"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/chirpz-ai/pandaprobe",
+      "x": "https://x.com/pandaprobe",
+      "discord": "https://discord.gg/A2VfrRhx"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Introduction",
+        "icon": "book-open",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "introduction/welcome",
+              "introduction/architecture"
+            ]
+          },
+          {
+            "group": "Tools",
+            "pages": [
+              "introduction/cli",
+              "introduction/agent-skill"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Harness",
+        "icon": "shield-check",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "harness/get-started/quickstart",
+              "harness/get-started/concepts",
+              "harness/get-started/how-it-works"
+            ]
+          },
+          {
+            "group": "The Self-Heal Loop",
+            "pages": [
+              "harness/loop/evaluation",
+              "harness/loop/notices-and-mailbox",
+              "harness/loop/repair-agent",
+              "harness/loop/agent-toolset",
+              "harness/loop/rules-and-retrieval"
+            ]
+          },
+          {
+            "group": "Closing the Loop",
+            "pages": [
+              "harness/closed-loop/rule-validation",
+              "harness/closed-loop/outcome-verifier",
+              "harness/closed-loop/eval-set-and-replay",
+              "harness/closed-loop/regression-runs",
+              "harness/closed-loop/calibration"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "harness/integrations/custom-loops",
+              "harness/integrations/frameworks"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "harness/reference/configuration",
+              "harness/reference/security",
+              "harness/reference/cost-and-reliability",
+              "harness/reference/migration-v09"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Tracing",
+        "icon": "route",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "tracing/get-started/quickstart",
+              "tracing/get-started/concepts",
+              "tracing/get-started/installation"
+            ]
+          },
+          {
+            "group": "Tracing",
+            "pages": [
+              "tracing/overview",
+              {
+                "group": "LLM Providers",
+                "icon": "package",
+                "pages": [
+                  "tracing/wrappers/overview",
+                  "tracing/wrappers/openai",
+                  "tracing/wrappers/anthropic",
+                  "tracing/wrappers/google-gemini",
+                  "tracing/wrappers/mistral",
+                  "tracing/wrappers/litellm",
+                  "tracing/wrappers/bedrock"
+                ]
+              },
+              {
+                "group": "Agent Frameworks",
+                "icon": "link",
+                "pages": [
+                  "tracing/integrations/overview",
+                  "tracing/integrations/langgraph",
+                  "tracing/integrations/langchain",
+                  "tracing/integrations/deepagents",
+                  "tracing/integrations/crewai",
+                  "tracing/integrations/google-adk",
+                  "tracing/integrations/claude-agent-sdk",
+                  "tracing/integrations/openai-agents-sdk"
+                ]
+              },
+              {
+                "group": "Manual Instrumentation",
+                "icon": "wrench",
+                "pages": [
+                  "tracing/manual/decorators",
+                  "tracing/manual/context-managers",
+                  "tracing/manual/low-level-client-api"
+                ]
+              },
+              "tracing/sessions",
+              "tracing/users",
+              "tracing/scoring",
+              {
+                "group": "Configuration",
+                "icon": "cog",
+                "pages": [
+                  "tracing/configuration/environment-variables",
+                  "tracing/configuration/project-configuration",
+                  "tracing/configuration/conditional-tracing",
+                  "tracing/configuration/troubleshooting"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Evaluation",
+        "icon": "drafting-compass",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "evaluation/get-started/quickstart",
+              "evaluation/get-started/concepts",
+              "evaluation/get-started/evaluation-approaches"
+            ]
+          },
+          {
+            "group": "Trace Evaluation",
+            "pages": [
+              "evaluation/trace-evaluation/introduction",
+              "evaluation/trace-evaluation/metrics"
+            ]
+          },
+          {
+            "group": "Agent Evaluation",
+            "pages": [
+              "evaluation/agent-evaluation/introduction",
+              "evaluation/agent-evaluation/metrics"
+            ]
+          },
+          {
+            "group": "Set Up Evaluation",
+            "pages": [
+              "evaluation/setup/introduction",
+              "evaluation/setup/run-eval-ui",
+              "evaluation/setup/run-eval-api",
+              "evaluation/setup/scheduling"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "icon": "terminal",
+        "openapi": "openapi.json",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/introduction"
+            ]
+          },
+          {
+            "group": "Traces",
+            "pages": [
+              {
+                "group": "Traces",
+                "pages": [
+                  "POST /traces",
+                  "GET /traces",
+                  "GET /traces/analytics",
+                  "GET /traces/users",
+                  "POST /traces/batch/delete",
+                  "POST /traces/batch/tags",
+                  "GET /traces/{trace_id}",
+                  "PATCH /traces/{trace_id}",
+                  "DELETE /traces/{trace_id}",
+                  "POST /traces/{trace_id}/spans",
+                  "PATCH /traces/{trace_id}/spans/{span_id}"
+                ]
+              },
+              {
+                "group": "Sessions",
+                "pages": [
+                  "GET /sessions",
+                  "GET /sessions/analytics",
+                  "GET /sessions/{session_id}",
+                  "DELETE /sessions/{session_id}"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Evaluations",
+            "pages": [
+              {
+                "group": "Trace Eval Runs",
+                "pages": [
+                  "GET /evaluations/providers",
+                  "GET /evaluations/trace-metrics",
+                  "GET /evaluations/trace-runs/template",
+                  "POST /evaluations/trace-runs",
+                  "GET /evaluations/trace-runs",
+                  "POST /evaluations/trace-runs/batch",
+                  "GET /evaluations/trace-runs/{run_id}",
+                  "DELETE /evaluations/trace-runs/{run_id}",
+                  "POST /evaluations/trace-runs/{run_id}/retry",
+                  "GET /evaluations/trace-runs/{run_id}/scores"
+                ]
+              },
+              {
+                "group": "Trace Scores",
+                "pages": [
+                  "POST /evaluations/trace-scores",
+                  "GET /evaluations/trace-scores",
+                  "GET /evaluations/trace-scores/{trace_id}",
+                  "PATCH /evaluations/trace-scores/{score_id}",
+                  "DELETE /evaluations/trace-scores/{score_id}",
+                  "GET /evaluations/analytics/trace-scores/summary",
+                  "GET /evaluations/analytics/trace-scores/trend",
+                  "GET /evaluations/analytics/trace-scores/distribution"
+                ]
+              },
+              {
+                "group": "Session Eval Runs",
+                "pages": [
+                  "GET /evaluations/session-metrics",
+                  "POST /evaluations/session-runs",
+                  "GET /evaluations/session-runs",
+                  "POST /evaluations/session-runs/batch",
+                  "GET /evaluations/session-runs/{run_id}",
+                  "DELETE /evaluations/session-runs/{run_id}",
+                  "POST /evaluations/session-runs/{run_id}/retry",
+                  "GET /evaluations/session-runs/{run_id}/scores"
+                ]
+              },
+              {
+                "group": "Session Scores",
+                "pages": [
+                  "GET /evaluations/session-scores",
+                  "GET /evaluations/session-scores/{session_id}",
+                  "DELETE /evaluations/session-scores/{score_id}",
+                  "GET /evaluations/analytics/session-scores/summary",
+                  "GET /evaluations/analytics/session-scores/trend",
+                  "GET /evaluations/analytics/session-scores/distribution",
+                  "GET /evaluations/analytics/session-scores/history/{session_id}",
+                  "GET /evaluations/analytics/session-scores/comparison"
+                ]
+              },
+              {
+                "group": "Monitors",
+                "pages": [
+                  "POST /evaluations/monitors",
+                  "GET /evaluations/monitors",
+                  "GET /evaluations/monitors/{monitor_id}",
+                  "PATCH /evaluations/monitors/{monitor_id}",
+                  "DELETE /evaluations/monitors/{monitor_id}",
+                  "POST /evaluations/monitors/{monitor_id}/pause",
+                  "POST /evaluations/monitors/{monitor_id}/resume",
+                  "POST /evaluations/monitors/{monitor_id}/trigger",
+                  "GET /evaluations/monitors/{monitor_id}/runs"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Changelog",
+        "icon": "history",
+        "pages": [
+          "changelog/python-sdk",
+          "changelog/harness",
+          "changelog/core-service",
+          "changelog/cli"
+        ]
+      }
+    ]
+  },
+  "redirects": [
+    {
+      "source": "/evaluation/overview",
+      "destination": "/evaluation/get-started/evaluation-approaches"
+    },
+    {
+      "source": "/evaluation/concepts",
+      "destination": "/evaluation/get-started/concepts"
+    },
+    {
+      "source": "/get-started/welcome",
+      "destination": "/introduction/welcome"
+    },
+    {
+      "source": "/tools/cli",
+      "destination": "/introduction/cli"
+    },
+    {
+      "source": "/overview/welcome",
+      "destination": "/introduction/welcome"
+    },
+    {
+      "source": "/overview/architecture",
+      "destination": "/introduction/architecture"
+    },
+    {
+      "source": "/overview/cli",
+      "destination": "/introduction/cli"
+    },
+    {
+      "source": "/overview/agent-skill",
+      "destination": "/introduction/agent-skill"
+    },
+    {
+      "source": "/tracing/concepts",
+      "destination": "/tracing/get-started/concepts"
+    },
+    {
+      "source": "/get-started/quickstart",
+      "destination": "/tracing/get-started/quickstart"
+    },
+    {
+      "source": "/get-started/concepts",
+      "destination": "/tracing/get-started/concepts"
+    },
+    {
+      "source": "/get-started/installation",
+      "destination": "/tracing/get-started/installation"
+    }
+  ],
+  "seo": {
+    "metatags": {
+      "canonical": "https://docs.pandaprobe.com",
+      "charset": "UTF-8",
+      "viewport": "width=device-width, initial-scale=1.0",
+      "description": "PandaProbe is an open-source agent engineering platform. Traces, evals, metrics, and live monitoring to debug and improve your AI agents.",
+      "keywords": "PandaProbe, AI agents, agent engineering, agent observability, agent tracing, agent evaluation, OpenAI tracing, Anthropic tracing, Google Gemini tracing, Mistral, LiteLLM, Bedrock, LangGraph, LangChain, DeepAgents, CrewAI, Google ADK, Python SDK, open source, agent debugging, agent monitoring",
+      "author": "Chirpz AI team",
+      "robots": "index, follow",
+      "googlebot": "index, follow",
+      "google": "notranslate",
+      "generator": "PandaProbe",
+      "theme-color": "#0c0c0b",
+      "color-scheme": "light dark",
+      "format-detection": "telephone=no",
+      "referrer": "origin",
+      "language": "en",
+      "copyright": "Copyright 2026 Chirpz AI",
+      "reply-to": "support@pandaprobe.com",
+      "distribution": "global",
+      "coverage": "Worldwide",
+      "category": "Technology",
+      "target": "developers",
+      "HandheldFriendly": "True",
+      "MobileOptimized": "320",
+      "apple-mobile-web-app-capable": "yes",
+      "apple-mobile-web-app-status-bar-style": "black-translucent",
+      "apple-mobile-web-app-title": "PandaProbe Docs",
+      "application-name": "PandaProbe",
+      "msapplication-TileColor": "#0c0c0b",
+      "og:type": "website",
+      "og:image": "https://docs.pandaprobe.com/assets/og-image-docs.png",
+      "og:site_name": "PandaProbe Documentation",
+      "og:locale": "en_US",
+      "twitter:card": "summary_large_image",
+      "twitter:site": "@pandaprobe",
+      "twitter:creator": "@pandaprobe",
+      "twitter:image": "https://docs.pandaprobe.com/assets/og-image-docs.png",
+      "twitter:image:alt": "PandaProbe logo - open source agent engineering platform"
+    }
+  }
+}

@@ -1,0 +1,194 @@
+---
+title: "Scheduling Evaluations"
+description: "Set up automated recurring evaluation monitors with custom cadences and filters."
+icon: "clock"
+---
+
+Evaluation **monitors** automate recurring evaluations. Instead of manually creating eval runs, a monitor saves your target type, metrics, filters, sampling rate, and cadence, then creates eval runs automatically in the background.
+
+Use monitors for recurring workflows such as:
+
+- Daily production trace quality checks
+- Weekly session reliability audits
+- Regression monitoring after releases
+- Continuous evaluation of high-value users, tags, or environments
+
+## Dashboard setup
+
+Create monitors from the **Evaluations** tab in the PandaProbe dashboard.
+
+<Steps>
+  <Step title="Open Evaluations">
+    Open the **Evaluations** tab from the dashboard navigation.
+  </Step>
+  <Step title="Open Monitors">
+    Select the **Monitors** card from the Evaluations landing page.
+  </Step>
+  <Step title="Click Create monitor">
+    Click **Create monitor** to open the monitor sidebar.
+  </Step>
+  <Step title="Configure the monitor">
+    Add a name, choose the target type (`TRACE` or `SESSION`), select metrics, and add filters that define the traces or sessions the monitor should evaluate.
+  </Step>
+  <Step title="Set the cadence">
+    Choose how often the monitor should create a new eval run. Cadence controls the recurring schedule.
+  </Step>
+  <Step title="Submit">
+    Click **Create monitor**. The monitor starts in the background and creates eval runs on its configured schedule.
+  </Step>
+</Steps>
+
+<video controls width="100%">
+  <source src="/assets/evals/monitor.mp4" type="video/mp4" />
+</video>
+
+### Monitor fields
+
+When creating a monitor from the dashboard, configure:
+
+- **Name**: a human-readable label for the monitor.
+- **Target type**: `TRACE` for trace evaluation or `SESSION` for session evaluation.
+- **Metrics**: the trace-level or session-level metrics to run.
+- **Filters**: the matching traces or sessions to evaluate.
+- **Sampling rate**: the portion of matching data to evaluate on each run.
+- **Cadence**: how often PandaProbe creates a new eval run.
+- **Model**: optional model selection for LLM-as-judge metrics.
+- **Customize signal weights**: optional for session monitors.
+
+### Filters
+
+<Tabs>
+  <Tab title="Trace monitors">
+    Trace monitors can filter by fields such as **Started after**, **Started before**, **Status**, **Trace ID**, **Session ID**, **User**, and **Tags**.
+  </Tab>
+  <Tab title="Session monitors">
+    Session monitors can filter by fields such as **Started after**, **Started before**, **Session ID**, **User**, **Tags**, error status, and minimum trace count.
+  </Tab>
+</Tabs>
+
+### Sampling rate
+
+Sampling rate controls what portion of matching data is evaluated each time the monitor runs. For example:
+
+- `1.0` evaluates all matching traces or sessions.
+- `0.5` evaluates 50% of matching traces or sessions.
+- `0.1` evaluates 10% of matching traces or sessions.
+
+Use sampling to control evaluation cost and volume for large projects.
+
+## API setup
+
+You can also create and manage monitors through the API.
+
+### Create a monitor
+
+```bash
+POST /evaluations/monitors
+```
+
+```json
+{
+  "name": "Daily production trace eval",
+  "target_type": "TRACE",
+  "metrics": ["task_completion", "tool_correctness", "confidence"],
+  "filters": {
+    "status": "COMPLETED",
+    "tags": ["production"]
+  },
+  "cadence": "daily",
+  "sampling_rate": 0.3,
+  "model": "openai/gpt-5.4",
+  "only_if_changed": true
+}
+```
+
+### Request fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Human-readable label for the monitor |
+| `target_type` | string | Yes | `"TRACE"` or `"SESSION"` |
+| `metrics` | string[] | Yes | Metric names to run on each scheduled eval |
+| `filters` | object | No | Scope the data the monitor evaluates |
+| `cadence` | string | Yes | Firing schedule |
+| `sampling_rate` | float | No | Fraction of matching data to evaluate per run |
+| `model` | string | No | LLM model override for judge calls |
+| `only_if_changed` | boolean | No | Skip the run if no new data has arrived since the previous run |
+| `signal_weights` | object | No | Override signal weights for session monitors |
+
+### Session monitor example
+
+```json
+{
+  "name": "Weekly agent reliability audit",
+  "target_type": "SESSION",
+  "metrics": ["agent_reliability", "agent_consistency"],
+  "filters": {
+    "min_trace_count": 3,
+    "tags": ["production"]
+  },
+  "cadence": "weekly",
+  "sampling_rate": 1.0,
+  "signal_weights": {
+    "confidence": 1.0,
+    "loop_detection": 1.5,
+    "tool_correctness": 0.8,
+    "coherence": 1.0
+  },
+  "only_if_changed": true
+}
+```
+
+## Cadence options
+
+Monitors support predefined intervals and custom cron expressions.
+
+| Value | Schedule |
+|---|---|
+| `every_6h` | Every 6 hours |
+| `daily` | Once per day |
+| `weekly` | Once per week |
+| `cron:0 3 * * *` | Daily at 3:00 AM UTC |
+| `cron:0 6 * * 1-5` | Weekdays at 6:00 AM UTC |
+| `cron:0 */4 * * *` | Every 4 hours |
+
+## The `only_if_changed` flag
+
+When `only_if_changed` is `true`, PandaProbe skips a scheduled run if no new traces or sessions have arrived since the previous run. This helps avoid re-evaluating the same data unnecessarily.
+
+Set it to `false` when you want the monitor to run on every cadence tick, even if the underlying data has not changed.
+
+## Manage monitors
+
+Monitors have two states:
+
+| Status | Description |
+|---|---|
+| `ACTIVE` | The monitor runs on schedule and creates eval runs at each cadence tick |
+| `PAUSED` | The schedule is suspended and no new runs are created |
+
+Common API operations:
+
+```bash
+GET /evaluations/monitors
+GET /evaluations/monitors/{monitor_id}
+PATCH /evaluations/monitors/{monitor_id}
+POST /evaluations/monitors/{monitor_id}/pause
+POST /evaluations/monitors/{monitor_id}/resume
+POST /evaluations/monitors/{monitor_id}/trigger
+DELETE /evaluations/monitors/{monitor_id}
+GET /evaluations/monitors/{monitor_id}/runs
+```
+
+Use `trigger` to create an immediate eval run from a monitor without waiting for the next scheduled cadence.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Run Evaluations via UI" icon="layout-dashboard" href="/evaluation/setup/run-eval-ui">
+    Create one-off trace and session eval runs from the dashboard.
+  </Card>
+  <Card title="Run Evaluations via API" icon="terminal" href="/evaluation/setup/run-eval-api">
+    Create and manage eval runs programmatically.
+  </Card>
+</CardGroup>

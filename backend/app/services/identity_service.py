@@ -1,0 +1,511 @@
+"""Orchestration logic for the Identity domain.
+
+Coordinates between API key generation, persistence, and domain
+validation for organizations, memberships, projects, and API keys.
+"""
+
+from datetime import datetime, timedelta, timezone
+from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.billing.plans import MAX_OWNED_ORGS, get_plan_config
+from app.core.identity.entities import APIKey, Invitation, Membership, Organization, Project
+from app.infrastructure.db.repositories.billing_repo import BillingRepository
+from app.infrastructure.db.repositories.identity_repo import IdentityRepository
+from app.infrastructure.db.repositories.invitation_repo import InvitationRepository
+from app.infrastructure.db.repositories.project_repo import ProjectRepository
+from app.infrastructure.db.repositories.user_repo import UserRepository
+from app.registry.constants import (
+    InvitationStatus,
+    MembershipRole,
+    SubscriptionPlan,
+    sanitize_text,
+    validate_resource_name,
+)
+from app.registry.exceptions import (
+    AuthorizationError,
+    ConflictError,
+    NotFoundError,
+    OrgLimitReachedError,
+    QuotaExceededError,
+    ValidationError,
+)
+from app.registry.security import generate_api_key, hash_api_key, key_prefix
+from app.registry.settings import settings
+
+
+class IdentityService:
+    """Application service that manages organizations, memberships, and API keys."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        """Initialise with an async database session."""
+        self._session = session
+        self._repo = IdentityRepository(session)
+        self._project_repo = ProjectRepository(session)
+        self._billing_repo = BillingRepository(session)
+        self._invitation_repo = InvitationRepository(session)
+        self._user_repo = UserRepository(session)
+
+    # -- organization ---------------------------------------------------------
+
+    async def create_organization(
+        self, name: str, owner_id: UUID, *, plan: SubscriptionPlan | None = None
+    ) -> Organization:
+        """Create a new tenant organization and assign the owner membership.
+
+        A default ``onboarding`` project is provisioned alongside the org
+        """
+        owned_count = await self._repo.count_user_owned_orgs(owner_id)
+        if owned_count >= MAX_OWNED_ORGS:
+            raise OrgLimitReachedError()
+
+        try:
+            clean = validate_resource_name(name, "Organization name")
+        except ValueError as exc:
+            raise ValidationError(str(exc))
+
+        org = await self._repo.create_organization(name=clean)
+        await self._repo.create_membership(user_id=owner_id, org_id=org.id, role=MembershipRole.OWNER)
+
+        sub = await self._billing_repo.create_subscription(
+            org_id=org.id,
+            **({"plan": plan} if plan else {}),
+        )
+        await self._billing_repo.create_usage_record(
+            org_id=org.id,
+            period_start=sub.current_period_start,
+            period_end=sub.current_period_end,
+        )
+
+        await self._project_repo.create_project(
+            org_id=org.id,
+            name="onboarding",
+            description="Your onboarding project",
+        )
+
+        return org
+
+    async def get_organization(self, org_id: UUID) -> Organization:
+        """Retrieve an organization or raise ``NotFoundError``."""
+        org = await self._repo.get_organization(org_id)
+        if org is None:
+            raise NotFoundError(f"Organization {org_id} not found.")
+        return org
+
+    async def update_organization(self, org_id: UUID, *, name: str | None = None) -> Organization:
+        """Update mutable organization fields."""
+        final_name = None
+        if name is not None:
+            try:
+                final_name = validate_resource_name(name, "Organization name")
+            except ValueError as exc:
+                raise ValidationError(str(exc))
+        org = await self._repo.update_organization(org_id, name=final_name)
+        if org is None:
+            raise NotFoundError(f"Organization {org_id} not found.")
+        return org
+
+    async def delete_organization(self, org_id: UUID) -> None:
+        """Hard-delete an organization and all related data (CASCADE)."""
+        await self.get_organization(org_id)
+        await self._repo.delete_organization(org_id)
+
+    # -- Membership -----------------------------------------------------------
+
+    async def require_membership(self, user_id: UUID, org_id: UUID) -> Membership:
+        """Ensure the user belongs to the org, or raise ``AuthorizationError``."""
+        membership = await self._repo.get_membership(user_id, org_id)
+        if membership is None:
+            raise AuthorizationError("You are not a member of this organization.")
+        return membership
+
+    async def require_admin(self, user_id: UUID, org_id: UUID) -> Membership:
+        """Ensure the user is at least ADMIN in the org."""
+        m = await self.require_membership(user_id, org_id)
+        if m.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}:
+            raise AuthorizationError("Admin or Owner role required.")
+        return m
+
+    async def require_owner(self, user_id: UUID, org_id: UUID) -> Membership:
+        """Ensure the user is OWNER in the org."""
+        m = await self.require_membership(user_id, org_id)
+        if m.role != MembershipRole.OWNER:
+            raise AuthorizationError("Owner role required.")
+        return m
+
+    # -- Invitations ----------------------------------------------------------
+
+    _INVITATION_TTL = timedelta(days=7)
+
+    async def create_invitation(
+        self,
+        actor_id: UUID,
+        org_id: UUID,
+        email: str,
+        role: MembershipRole = MembershipRole.MEMBER,
+    ) -> Invitation:
+        """Invite a user by email, respecting role hierarchy and plan quota."""
+        actor = await self.require_membership(actor_id, org_id)
+
+        if actor.role == MembershipRole.MEMBER:
+            raise AuthorizationError("Members cannot invite users to the organization.")
+
+        if actor.role == MembershipRole.ADMIN and role != MembershipRole.MEMBER:
+            raise AuthorizationError("Admins can only invite users with MEMBER role.")
+
+        if role == MembershipRole.OWNER:
+            raise AuthorizationError("Cannot invite a user as OWNER.")
+
+        email = email.strip().lower()
+
+        actor_user = await self._user_repo.get_user(actor_id)
+        if actor_user and actor_user.email.lower() == email:
+            raise ConflictError("You cannot invite yourself.")
+
+        existing_user = await self._user_repo.get_user_by_email(email)
+        if existing_user:
+            existing_membership = await self._repo.get_membership(existing_user.id, org_id)
+            if existing_membership:
+                raise ConflictError("User is already a member of this organization.")
+
+        existing_invitation = await self._invitation_repo.get_pending_invitation(org_id, email)
+        if existing_invitation:
+            raise ConflictError("An invitation for this email is already pending.")
+
+        subscription = await self._billing_repo.get_subscription_by_org(org_id)
+        if subscription:
+            plan_cfg = get_plan_config(SubscriptionPlan(subscription.plan))
+            if plan_cfg.max_members is not None:
+                member_count = await self._billing_repo.count_org_members(org_id)
+                pending_count = await self._invitation_repo.count_pending_for_org(org_id)
+                if member_count + pending_count >= plan_cfg.max_members:
+                    raise QuotaExceededError(
+                        f"Your {subscription.plan} plan allows up to {plan_cfg.max_members} member(s). "
+                        "Please upgrade to invite more."
+                    )
+
+        now = datetime.now(timezone.utc)
+        invitation = await self._invitation_repo.create_invitation(
+            org_id=org_id,
+            email=email,
+            role=role,
+            invited_by=actor_id,
+            expires_at=now + self._INVITATION_TTL,
+        )
+
+        if settings.RESEND_API_KEY and settings.APP_URL:
+            from app.infrastructure.queue.tasks import send_invitation_email_task
+
+            send_invitation_email_task.delay(
+                to=email,
+                org_name=invitation.org_name,
+                inviter_name=actor_user.display_name if actor_user else "",
+                role=role.value,
+                app_url=settings.APP_URL,
+            )
+
+        return invitation
+
+    async def accept_invitation(self, user_id: UUID, invitation_id: UUID) -> Membership:
+        """Accept a pending invitation, creating a membership."""
+        invitation = await self._invitation_repo.get_invitation(invitation_id)
+        if invitation is None:
+            raise NotFoundError("Invitation not found.")
+
+        user = await self._user_repo.get_user(user_id)
+        if user is None:
+            raise NotFoundError("User not found.")
+        if user.email.lower() != invitation.email.lower():
+            raise AuthorizationError("This invitation was sent to a different email address.")
+
+        if invitation.status != InvitationStatus.PENDING:
+            raise ConflictError("This invitation has already been processed.")
+
+        now = datetime.now(timezone.utc)
+        if invitation.expires_at < now:
+            await self._invitation_repo.update_status(invitation_id, InvitationStatus.EXPIRED)
+            raise ConflictError("This invitation has expired.")
+
+        existing = await self._repo.get_membership(user_id, invitation.org_id)
+        if existing:
+            raise ConflictError("You are already a member of this organization.")
+
+        membership = await self._repo.create_membership(
+            user_id=user_id,
+            org_id=invitation.org_id,
+            role=invitation.role,
+        )
+        await self._invitation_repo.update_status(invitation_id, InvitationStatus.ACCEPTED)
+        return membership
+
+    async def decline_invitation(self, user_id: UUID, invitation_id: UUID) -> None:
+        """Decline a pending invitation."""
+        invitation = await self._invitation_repo.get_invitation(invitation_id)
+        if invitation is None:
+            raise NotFoundError("Invitation not found.")
+
+        user = await self._user_repo.get_user(user_id)
+        if user is None:
+            raise NotFoundError("User not found.")
+        if user.email.lower() != invitation.email.lower():
+            raise AuthorizationError("This invitation was sent to a different email address.")
+
+        if invitation.status != InvitationStatus.PENDING:
+            raise ConflictError("This invitation has already been processed.")
+
+        now = datetime.now(timezone.utc)
+        if invitation.expires_at < now:
+            await self._invitation_repo.update_status(invitation_id, InvitationStatus.EXPIRED)
+            raise ConflictError("This invitation has expired.")
+
+        await self._invitation_repo.update_status(invitation_id, InvitationStatus.DECLINED)
+
+    async def revoke_invitation(self, actor_id: UUID, org_id: UUID, invitation_id: UUID) -> None:
+        """Revoke a pending invitation (admin/owner only)."""
+        invitation = await self._invitation_repo.get_invitation(invitation_id)
+        if invitation is None:
+            raise NotFoundError("Invitation not found.")
+        if invitation.org_id != org_id:
+            raise NotFoundError("Invitation not found.")
+
+        await self.require_admin(actor_id, org_id)
+
+        if invitation.status != InvitationStatus.PENDING:
+            raise ConflictError("Only pending invitations can be revoked.")
+
+        await self._invitation_repo.update_status(invitation_id, InvitationStatus.REVOKED)
+
+    async def list_org_invitations(self, org_id: UUID) -> list[Invitation]:
+        """Return all invitations for an organization."""
+        return await self._invitation_repo.list_org_invitations(org_id)
+
+    async def list_my_invitations(self, user_email: str) -> list[Invitation]:
+        """Return all pending non-expired invitations for the given email."""
+        return await self._invitation_repo.list_pending_for_email(user_email.lower())
+
+    # -- Membership role & removal --------------------------------------------
+
+    async def update_member_role(
+        self, actor_id: UUID, org_id: UUID, target_user_id: UUID, new_role: MembershipRole
+    ) -> Membership:
+        """Change a member's role, respecting hierarchy.
+
+        - Cannot change your own role.
+        - OWNER can change any non-OWNER to any role (including OWNER).
+        - ADMIN and MEMBER cannot change roles.
+        """
+        if actor_id == target_user_id:
+            raise AuthorizationError("Cannot change your own role.")
+
+        actor = await self.require_membership(actor_id, org_id)
+        if actor.role != MembershipRole.OWNER:
+            raise AuthorizationError("Only owners can change member roles.")
+
+        target = await self._repo.get_membership(target_user_id, org_id)
+        if target is None:
+            raise NotFoundError("Target user is not a member of this organization.")
+
+        if target.role == MembershipRole.OWNER:
+            raise AuthorizationError("Cannot change the role of another owner.")
+
+        updated = await self._repo.update_membership_role(target_user_id, org_id, new_role)
+        if updated is None:
+            raise NotFoundError("Target user is not a member of this organization.")
+        return updated
+
+    async def remove_member(self, actor_id: UUID, org_id: UUID, target_user_id: UUID) -> None:
+        """Remove a member from an organization, respecting role hierarchy.
+
+        - OWNER can remove ADMIN and MEMBER (not other OWNERs).
+        - ADMIN can remove MEMBER only.
+        - MEMBER cannot remove anyone.
+        """
+        actor = await self.require_membership(actor_id, org_id)
+        target = await self._repo.get_membership(target_user_id, org_id)
+        if target is None:
+            raise NotFoundError("Target user is not a member of this organization.")
+
+        if target.role == MembershipRole.OWNER:
+            raise AuthorizationError("Cannot remove an OWNER from the organization.")
+
+        if actor.role == MembershipRole.MEMBER:
+            raise AuthorizationError("Members cannot remove other members.")
+
+        if actor.role == MembershipRole.ADMIN and target.role != MembershipRole.MEMBER:
+            raise AuthorizationError("Admins can only remove members with MEMBER role.")
+
+        await self._repo.delete_membership(target_user_id, org_id)
+
+    async def list_user_orgs(self, user_id: UUID) -> list[Membership]:
+        """Return all memberships for a user."""
+        return await self._repo.list_user_orgs(user_id)
+
+    async def list_org_members(self, org_id: UUID) -> list[Membership]:
+        """Return all members of an organization."""
+        return await self._repo.list_org_members(org_id)
+
+    # -- Project --------------------------------------------------------------
+
+    async def create_project(self, org_id: UUID, name: str, description: str = "") -> Project:
+        """Create a new project within an organization."""
+        try:
+            clean = validate_resource_name(name, "Project name")
+            clean_desc = sanitize_text(description, "Project description")
+        except ValueError as exc:
+            raise ValidationError(str(exc))
+        await self.get_organization(org_id)
+        return await self._project_repo.create_project(org_id=org_id, name=clean, description=clean_desc)
+
+    async def get_project(self, project_id: UUID, *, org_id: UUID | None = None) -> Project:
+        """Fetch a project or raise ``NotFoundError``.
+
+        When *org_id* is supplied the project must belong to that
+        organization, otherwise ``AuthorizationError`` is raised.
+        """
+        project = await self._project_repo.get_project(project_id)
+        if project is None:
+            raise NotFoundError(f"Project {project_id} not found.")
+        if org_id is not None and project.org_id != org_id:
+            raise AuthorizationError("Project does not belong to this organization.")
+        return project
+
+    async def update_project(
+        self,
+        org_id: UUID,
+        project_id: UUID,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> Project:
+        """Update a project's name and/or description."""
+        project = await self.get_project(project_id, org_id=org_id)
+        final_name = None
+        final_desc = None
+        try:
+            if name is not None:
+                final_name = validate_resource_name(name, "Project name")
+            if description is not None:
+                final_desc = sanitize_text(description, "Project description")
+        except ValueError as exc:
+            raise ValidationError(str(exc))
+        updated = await self._project_repo.update_project(
+            project.id,
+            name=final_name,
+            description=final_desc,
+        )
+        if updated is None:
+            raise NotFoundError(f"Project {project_id} not found.")
+        return updated
+
+    async def delete_project(self, org_id: UUID, project_id: UUID) -> None:
+        """Delete a project and all associated data (traces, evaluations).
+
+        PostgreSQL ``ON DELETE CASCADE`` handles child records.
+        """
+        await self.get_project(project_id, org_id=org_id)
+        await self._project_repo.delete_project(project_id)
+
+    async def list_projects(self, org_id: UUID) -> list[Project]:
+        """List all projects for an organization."""
+        return await self._project_repo.list_projects(org_id)
+
+    # -- API Keys -------------------------------------------------------------
+
+    _EXPIRATION_DELTAS: dict[str, timedelta | None] = {
+        "never": None,
+        "90d": timedelta(days=90),
+    }
+
+    async def create_api_key(
+        self,
+        org_id: UUID,
+        name: str,
+        created_by: UUID | None = None,
+        expiration: str = "never",
+    ) -> tuple[APIKey, str]:
+        """Generate a new org-scoped API key.
+
+        Args:
+            org_id: Organization to scope the key to.
+            name: Human-readable label for the key.
+            created_by: UUID of the user creating the key, if available.
+            expiration: ``"never"`` (no expiry, default) or ``"90d"`` (90-day TTL).
+
+        Returns:
+            A tuple of (APIKey entity, raw_key_string).
+        """
+        await self.get_organization(org_id)
+
+        if expiration not in self._EXPIRATION_DELTAS:
+            raise ValidationError(
+                f"Unsupported expiration value '{expiration}'. Allowed: {', '.join(sorted(self._EXPIRATION_DELTAS))}."
+            )
+        delta = self._EXPIRATION_DELTAS[expiration]
+        expires_at: datetime | None = datetime.now(timezone.utc) + delta if delta else None
+
+        raw_key = generate_api_key()
+        hashed = hash_api_key(raw_key)
+        prefix = key_prefix(raw_key)
+
+        api_key = await self._repo.create_api_key(
+            org_id=org_id,
+            key_hash=hashed,
+            key_prefix=prefix,
+            name=name,
+            created_by=created_by,
+            expires_at=expires_at,
+        )
+        return api_key, raw_key
+
+    async def get_api_key(self, key_id: UUID, *, org_id: UUID) -> APIKey:
+        """Fetch a single API key, verifying it belongs to *org_id*."""
+        api_key = await self._repo.get_api_key(key_id)
+        if api_key is None:
+            raise NotFoundError(f"API key {key_id} not found.")
+        if api_key.org_id != org_id:
+            raise AuthorizationError("API key does not belong to this organization.")
+        return api_key
+
+    async def list_api_keys(self, org_id: UUID) -> list[APIKey]:
+        """List all API keys for an organization."""
+        await self.get_organization(org_id)
+        return await self._repo.list_api_keys(org_id)
+
+    async def rotate_api_key(
+        self,
+        key_id: UUID,
+        *,
+        org_id: UUID,
+        created_by: UUID | None = None,
+    ) -> tuple[APIKey, str]:
+        """Create a replacement key with a fresh 90-day expiration.
+
+        The old key remains active until its original expiration.
+        Only keys that have an expiration date can be rotated.
+        """
+        old_key = await self.get_api_key(key_id, org_id=org_id)
+        if not old_key.is_active:
+            raise ValidationError("Cannot rotate a revoked API key.")
+        if old_key.expires_at is None:
+            raise ValidationError(
+                "Only keys with an expiration can be rotated. "
+                "Production keys (never expire) should be revoked and re-created instead."
+            )
+
+        return await self.create_api_key(
+            org_id=org_id,
+            name=old_key.name,
+            created_by=created_by,
+            expiration="90d",
+        )
+
+    async def revoke_api_key(self, key_id: UUID, *, org_id: UUID) -> None:
+        """Deactivate an API key after verifying it belongs to *org_id*."""
+        await self.get_api_key(key_id, org_id=org_id)
+        await self._repo.revoke_api_key(key_id)
+
+    async def delete_api_key(self, key_id: UUID, *, org_id: UUID) -> None:
+        """Permanently remove an API key after verifying it belongs to *org_id*."""
+        await self.get_api_key(key_id, org_id=org_id)
+        await self._repo.delete_api_key(key_id)

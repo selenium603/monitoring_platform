@@ -1,0 +1,72 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-deps:
+    name: Backend – Verify dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: make backend-install
+
+      - name: Verify app is importable
+        working-directory: backend
+        run: uv run python -c "import app.main; print('OK')"
+
+  backend-docker:
+    name: Backend – Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build Docker image
+        run: docker build -t pandaprobe-backend:ci-${{ github.sha }} ./backend
+
+  frontend-build:
+    name: Frontend – Production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install dependencies
+        run: make frontend-install
+
+      - name: Build
+        run: make frontend-build
+        env:
+          NEXT_PUBLIC_AUTH_ENABLED: "false"
+
+  frontend-docker:
+    name: Frontend – Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build Docker image
+        run: docker build -t pandaprobe-frontend:ci-${{ github.sha }} ./frontend

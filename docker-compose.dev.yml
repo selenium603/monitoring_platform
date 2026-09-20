@@ -1,0 +1,179 @@
+# =============================================================================
+# PandaProbe — Build-from-source Docker Compose (for contributors)
+#
+# Builds images locally with source-code bind mounts for hot reload.
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# For running with pre-built public images, use docker-compose.yml instead.
+# =============================================================================
+
+services:
+  # ---------- FastAPI application ----------
+  app:
+    build:
+      context: ./backend
+      args:
+        APP_ENV: ${APP_ENV:-development}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/logs:/app/logs
+      - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
+    env_file:
+      - ./backend/.env.${APP_ENV:-development}
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - GOOGLE_APPLICATION_CREDENTIALS=/home/appuser/.config/gcloud/application_default_credentials.json
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: on-failure
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - pandaprobe
+
+  # ---------- Celery background worker ----------
+  worker:
+    build:
+      context: ./backend
+      args:
+        APP_ENV: ${APP_ENV:-development}
+    command:
+      [
+        "/app/.venv/bin/celery",
+        "-A", "app.infrastructure.queue.celery_app",
+        "worker",
+        "--loglevel=info",
+        "--autoscale=10,2",
+      ]
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/logs:/app/logs
+      - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
+    env_file:
+      - ./backend/.env.${APP_ENV:-development}
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - GOOGLE_APPLICATION_CREDENTIALS=/home/appuser/.config/gcloud/application_default_credentials.json
+    restart: on-failure
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - pandaprobe
+
+  # ---------- Celery Beat scheduler ----------
+  beat:
+    build:
+      context: ./backend
+      args:
+        APP_ENV: ${APP_ENV:-development}
+    command:
+      [
+        "/app/.venv/bin/celery",
+        "-A", "app.infrastructure.queue.celery_app",
+        "beat",
+        "--loglevel=info",
+      ]
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/logs:/app/logs
+    env_file:
+      - ./backend/.env.${APP_ENV:-development}
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+    restart: on-failure
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - pandaprobe
+
+  # ---------- PostgreSQL ----------
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-pandaprobe_db}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - pandaprobe
+
+  # ---------- Redis ----------
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - pandaprobe
+
+  # ---------- Next.js frontend ----------
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/next.config.ts:/app/next.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - ./frontend/postcss.config.mjs:/app/postcss.config.mjs
+    env_file:
+      - path: ./frontend/.env.development
+        required: false
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NODE_OPTIONS=--max-old-space-size=2048
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: on-failure
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - pandaprobe
+
+networks:
+  pandaprobe:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:

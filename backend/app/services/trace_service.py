@@ -1,0 +1,329 @@
+"""Orchestration logic for trace ingestion and retrieval.
+
+The ingestion path serialises the payload and persists a local background
+job so the API can return 202 immediately. Read operations go directly to
+the database through the repository.
+"""
+
+from datetime import datetime
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import Row
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.traces.entities import Span, Trace, TraceDetail
+from app.infrastructure.db.repositories.trace_repo import TraceRepository
+from app.logging import logger
+from app.registry.constants import (
+    AnalyticsGranularity,
+    SessionSortBy,
+    SortOrder,
+    TraceSortBy,
+    TraceStatus,
+)
+from app.registry.exceptions import NotFoundError
+
+
+class TraceService:
+    """Application service for traces."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._repo = TraceRepository(session)
+
+    # -- Write (async via the local runner) -----------------------------------
+
+    @staticmethod
+    async def enqueue_trace(trace: Trace) -> str:
+        """Persist a validated trace job for the local task runner.
+
+        Returns the durable local job id so the caller can optionally poll
+        for completion.
+        """
+        from app.infrastructure.local_tasks.queue import enqueue_local_job
+
+        job_id = await enqueue_local_job(
+            task_name="process_trace",
+            payload={"trace": trace.model_dump(mode="json")},
+            max_retries=3,
+            retry_delay_seconds=5,
+            timeout_seconds=300,
+        )
+        logger.info("trace_enqueued", trace_id=str(trace.trace_id), task_id=str(job_id))
+        return str(job_id)
+
+    # -- Update ----------------------------------------------------------
+
+    async def _enrich_trace(self, trace: Trace) -> TraceDetail:
+        """Attach aggregated span stats to a Trace."""
+        stats = await self._repo.get_trace_span_stats(
+            trace.project_id,
+            [trace.trace_id],
+        )
+        tokens, cost = stats.get(trace.trace_id, (0, 0.0))
+        return TraceDetail(trace=trace, total_tokens=tokens, total_cost=cost)
+
+    async def update_trace(
+        self,
+        trace_id: UUID,
+        project_id: UUID,
+        **fields: Any,
+    ) -> TraceDetail:
+        """Update trace fields or raise ``NotFoundError``.
+
+        Returns the trace without spans -- ``update_trace`` does not load them.
+        """
+        row = await self._repo.update_trace(trace_id, project_id, **fields)
+        if row is None:
+            raise NotFoundError(f"Trace {trace_id} not found.")
+        return await self._enrich_trace(self._repo._to_trace(row, include_spans=False))
+
+    async def update_span(
+        self,
+        span_id: UUID,
+        trace_id: UUID,
+        project_id: UUID,
+        **fields: Any,
+    ) -> Any:
+        """Update span fields or raise ``NotFoundError``."""
+        row = await self._repo.update_span(span_id, trace_id, project_id, **fields)
+        if row is None:
+            raise NotFoundError(f"Span {span_id} not found on trace {trace_id}.")
+        return self._repo._to_span(row)
+
+    async def add_spans(
+        self,
+        trace_id: UUID,
+        project_id: UUID,
+        spans: list[Span],
+    ) -> None:
+        """Add spans to an existing trace, or raise ``NotFoundError``."""
+        ok = await self._repo.add_spans(trace_id, project_id, spans)
+        if not ok:
+            raise NotFoundError(f"Trace {trace_id} not found.")
+
+    # -- Read -----------------------------------------------------------------
+
+    async def get_trace(self, trace_id: UUID, project_id: UUID) -> TraceDetail:
+        """Fetch a single trace with stats, or raise ``NotFoundError``."""
+        trace = await self._repo.get_trace(trace_id, project_id)
+        if trace is None:
+            raise NotFoundError(f"Trace {trace_id} not found.")
+        return await self._enrich_trace(trace)
+
+    async def list_traces(
+        self,
+        project_id: UUID,
+        limit: int = 50,
+        offset: int = 0,
+        *,
+        session_id: str | None = None,
+        status: TraceStatus | None = None,
+        user_id: str | None = None,
+        tags: list[str] | None = None,
+        name: str | None = None,
+        started_after: datetime | None = None,
+        started_before: datetime | None = None,
+        sort_by: TraceSortBy = TraceSortBy.STARTED_AT,
+        sort_order: SortOrder = SortOrder.DESC,
+    ) -> tuple[list[Row[Any]], int]:
+        """Return paginated traces with computed stats and total count."""
+        return await self._repo.list_traces(
+            project_id,
+            limit=limit,
+            offset=offset,
+            session_id=session_id,
+            status=status,
+            user_id=user_id,
+            tags=tags,
+            name=name,
+            started_after=started_after,
+            started_before=started_before,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+
+    # -- Delete ----------------------------------------------------------
+
+    async def delete_trace(self, trace_id: UUID, project_id: UUID) -> None:
+        """Delete a trace or raise ``NotFoundError``."""
+        deleted = await self._repo.delete_trace(trace_id, project_id)
+        if not deleted:
+            raise NotFoundError(f"Trace {trace_id} not found.")
+
+    # -- Batch -----------------------------------------------------------
+
+    async def batch_delete_traces(
+        self,
+        project_id: UUID,
+        trace_ids: list[UUID],
+    ) -> int:
+        """Delete multiple traces at once.  Returns count removed."""
+        return await self._repo.batch_delete_traces(project_id, trace_ids)
+
+    async def batch_update_tags(
+        self,
+        project_id: UUID,
+        trace_ids: list[UUID],
+        add_tags: list[str] | None = None,
+        remove_tags: list[str] | None = None,
+    ) -> int:
+        """Add/remove tags on multiple traces.  Returns count affected."""
+        return await self._repo.batch_update_tags(
+            project_id,
+            trace_ids,
+            add_tags=add_tags,
+            remove_tags=remove_tags,
+        )
+
+    # -- Sessions -------------------------------------------------------------
+
+    async def list_sessions(
+        self,
+        project_id: UUID,
+        limit: int = 50,
+        offset: int = 0,
+        *,
+        user_id: str | None = None,
+        has_error: bool | None = None,
+        started_after: datetime | None = None,
+        started_before: datetime | None = None,
+        tags: list[str] | None = None,
+        query: str | None = None,
+        sort_by: SessionSortBy = SessionSortBy.RECENT,
+        sort_order: SortOrder = SortOrder.DESC,
+    ) -> tuple[list[Row[Any]], int]:
+        """Return paginated session summaries with total count."""
+        return await self._repo.list_sessions(
+            project_id,
+            limit=limit,
+            offset=offset,
+            user_id=user_id,
+            has_error=has_error,
+            started_after=started_after,
+            started_before=started_before,
+            tags=tags,
+            query=query,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+
+    async def get_session_summary(
+        self,
+        project_id: UUID,
+        session_id: str,
+    ) -> Row[Any]:
+        """Return an aggregated session summary, or raise ``NotFoundError``."""
+        row = await self._repo.get_session_summary(project_id, session_id)
+        if row is None:
+            raise NotFoundError(f"Session '{session_id}' not found.")
+        return row
+
+    async def get_session_traces(
+        self,
+        project_id: UUID,
+        session_id: str,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> tuple[list[TraceDetail], int]:
+        """Return paginated ``TraceDetail`` entities for a session."""
+        traces, total = await self._repo.get_session_traces(
+            project_id,
+            session_id,
+            limit=limit,
+            offset=offset,
+        )
+        stats = await self._repo.get_trace_span_stats(
+            project_id,
+            [t.trace_id for t in traces],
+        )
+        details = [
+            TraceDetail(
+                trace=t,
+                total_tokens=tokens,
+                total_cost=cost,
+            )
+            for t in traces
+            for tokens, cost in [stats.get(t.trace_id, (0, 0.0))]
+        ]
+        return details, total
+
+    async def delete_session(self, project_id: UUID, session_id: str) -> int:
+        """Delete all traces in a session.  Raises ``NotFoundError`` if none found."""
+        count = await self._repo.delete_session(project_id, session_id)
+        if count == 0:
+            raise NotFoundError(f"Session '{session_id}' not found.")
+        return count
+
+    async def get_session_analytics(
+        self,
+        project_id: UUID,
+        granularity: AnalyticsGranularity,
+        started_after: datetime,
+        started_before: datetime,
+    ) -> list[Row[Any]]:
+        """Return time-bucketed session statistics."""
+        return await self._repo.get_session_analytics(
+            project_id,
+            granularity,
+            started_after,
+            started_before,
+        )
+
+    # -- Analytics -------------------------------------------------------
+
+    async def get_trace_analytics(
+        self,
+        project_id: UUID,
+        granularity: AnalyticsGranularity,
+        started_after: datetime,
+        started_before: datetime,
+    ) -> list[Row[Any]]:
+        """Return time-bucketed trace statistics (volume, errors, latency)."""
+        return await self._repo.get_trace_analytics(
+            project_id,
+            granularity,
+            started_after,
+            started_before,
+        )
+
+    async def get_token_cost_analytics(
+        self,
+        project_id: UUID,
+        granularity: AnalyticsGranularity,
+        started_after: datetime,
+        started_before: datetime,
+    ) -> list[Row[Any]]:
+        """Return time-bucketed token usage and cost from spans."""
+        return await self._repo.get_token_cost_analytics(
+            project_id,
+            granularity,
+            started_after,
+            started_before,
+        )
+
+    async def get_top_models(
+        self,
+        project_id: UUID,
+        started_after: datetime,
+        started_before: datetime,
+        limit: int = 10,
+    ) -> list[Row[Any]]:
+        """Return the most-used LLM models within a time window."""
+        return await self._repo.get_top_models(
+            project_id,
+            started_after,
+            started_before,
+            limit=limit,
+        )
+
+    # -- User aggregation ------------------------------------------------
+
+    async def list_trace_users(
+        self,
+        project_id: UUID,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[Row[Any]], int]:
+        """Return user-level trace aggregation with total count."""
+        return await self._repo.list_trace_users(project_id, limit=limit, offset=offset)
