@@ -29,8 +29,9 @@ RUN uv sync --frozen --no-dev --no-install-project
 # Copy application code
 COPY . .
 
-# Make scripts executable
-RUN chmod +x /app/scripts/docker-entrypoint.sh
+# Normalize Windows checkouts before executing the script in Linux.
+RUN sed -i 's/\r$//' /app/scripts/docker-entrypoint.sh \
+    && chmod +x /app/scripts/docker-entrypoint.sh
 
 # Non-root user
 RUN useradd -m appuser && chown -R appuser:appuser /app
