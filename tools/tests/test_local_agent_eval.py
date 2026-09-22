@@ -78,6 +78,92 @@ graph = FakeGraph()
             self.assertEqual(spans[1]["input"], {"query": "hello"})
             self.assertEqual(spans[1]["output"], {"result": "world"})
 
+    def test_loads_agent_executor_and_detects_input_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project = Path(temporary_directory)
+            package = project / "src" / "executor_agent"
+            package.mkdir(parents=True)
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "agent.py").write_text(
+                """
+class InputSchema:
+    @classmethod
+    def model_json_schema(cls):
+        return {"type": "object", "properties": {"input": {"type": "string"}}}
+
+class FakeExecutor:
+    input_schema = InputSchema
+
+    async def astream_events(self, inputs, **kwargs):
+        assert inputs == {"input": "hello"}
+        assert kwargs["config"]["configurable"]["thread_id"] == "thread-1"
+        yield {"event": "on_chain_start", "run_id": "root", "name": "executor", "parent_ids": [], "data": {"input": inputs}}
+        yield {"event": "on_chain_end", "run_id": "root", "name": "executor", "parent_ids": [], "data": {"output": {"output": "done"}}}
+
+executor = FakeExecutor()
+""".strip(),
+                encoding="utf-8",
+            )
+
+            project_dir, entrypoint, env_path, import_paths = BRIDGE.discover_agent_project(
+                str(project), "executor_agent.agent:executor", None
+            )
+            output, spans, event_count = asyncio.run(
+                BRIDGE.collect_langgraph_events(
+                    entrypoint,
+                    "hello",
+                    project_dir=project_dir,
+                    import_paths=import_paths,
+                    thread_id="thread-1",
+                )
+            )
+
+            self.assertIsNone(env_path)
+            self.assertEqual(output, "done")
+            self.assertEqual(event_count, 2)
+            self.assertEqual(spans[0]["input"], {"input": "hello"})
+
+    def test_supports_factory_custom_input_output_and_invoke_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project = Path(temporary_directory)
+            module = project / "factory_agent.py"
+            module.write_text(
+                """
+class FallbackAgent:
+    name = "fallback-agent"
+
+    def __init__(self, prefix):
+        self.prefix = prefix
+
+    async def ainvoke(self, inputs, **kwargs):
+        assert inputs == {"payload": {"question": "hello"}}
+        assert kwargs["config"]["metadata"]["suite"] == "smoke"
+        return {"data": {"answer": self.prefix + "done"}}
+
+def build_agent(prefix):
+    return FallbackAgent(prefix)
+""".strip(),
+                encoding="utf-8",
+            )
+
+            output, spans, event_count = asyncio.run(
+                BRIDGE.collect_langgraph_events(
+                    "factory_agent:build_agent",
+                    "hello",
+                    project_dir=project,
+                    import_paths=[project],
+                    factory_values={"prefix": "result:"},
+                    input_template={"payload": {"question": "{prompt}"}},
+                    output_path="data.answer",
+                    config_values={"metadata": {"suite": "smoke"}},
+                )
+            )
+
+            self.assertEqual(output, "result:done")
+            self.assertEqual(event_count, 0)
+            self.assertEqual(len(spans), 1)
+            self.assertEqual(spans[0]["metadata"]["capture_mode"], "invoke-fallback")
+
 
 if __name__ == "__main__":
     unittest.main()

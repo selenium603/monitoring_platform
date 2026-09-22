@@ -2,14 +2,14 @@
 
 `tools/local_agent_eval.py` 是一个只使用 Python 标准库的本地适配器。它运行你的 Agent，收集输入、输出、耗时和错误，通过 PandaProbe REST API 创建 Trace，并可立即发起 LLM 评测。你的 Agent 本身不需要引入 PandaProbe SDK。
 
-## 方式一：直接加载标准 LangGraph 项目（推荐）
+## 方式一：加载 LangChain/LangGraph 项目（推荐）
 
 如果 Agent 目录中有 `langgraph.json`，只需把目录传给 `--agent-dir`。适配器会自动读取 Graph 入口、项目 `.env`、`src` 源码目录和默认运行时 Context，并捕获 LLM、工具、检索器和节点事件，不需要修改 Agent 代码。
 
 本仓库中的 `react-agent-main` 可以这样运行：
 
 ```powershell
-.\Run-LangGraphProject.ps1 `
+.\Run-LangChainAgent.ps1 `
   -AgentDir "C:\Users\carol\Desktop\pandaprobe-main\pandaprobe-main\test\react-agent-main\react-agent-main" `
   -Prompt "Who founded LangChain?" `
   -Name "ReAct Search Agent" `
@@ -28,6 +28,33 @@ python tools/local_agent_eval.py `
 ```
 
 不写 `--metric` 时只运行 Agent 并记录完整 Trace，不会产生评测模型费用。
+
+普通 LangChain `AgentExecutor`、Runnable 或自定义工厂没有 `langgraph.json` 时，用 `-Entrypoint` 指定入口。适配器会读取输入 Schema；也可以明确指定输入和输出：
+
+```powershell
+.\Run-LangChainAgent.ps1 `
+  -AgentDir "C:\path\to\langchain-agent" `
+  -Entrypoint "my_agent.main:agent_executor" `
+  -InputMode input `
+  -OutputPath output `
+  -Prompt "请完成这个任务" `
+  -Evaluate
+```
+
+常用参数：
+
+| 参数 | 用途 |
+|---|---|
+| `-Entrypoint` | `模块:属性`、`模块:工厂函数` 或 `文件.py:属性` |
+| `-InputMode` | `auto`、`messages`、`input`、`query`、`question`、`prompt` 或 `string` |
+| `-InputJson` | 完全自定义输入，例如 `{"task":"{prompt}"}` |
+| `-OutputPath` | 最终回答路径，例如 `output` 或 `data.answer` |
+| `-FactoryJson` | 创建 Agent 工厂函数所需的关键字参数 |
+| `-ConfigJson` | LangChain `RunnableConfig`，包括 tags、metadata、configurable |
+| `-ContextJson` | LangGraph Runtime Context 参数 |
+| `-ThreadId` | 带 Checkpointer 的 LangGraph 会话 ID |
+
+适配器优先使用 `astream_events(v2)` 捕获内部 LLM、工具、检索和 Chain。只有 `invoke/ainvoke` 的旧式 Runnable 也能运行和评测，但只能记录最外层调用。
 
 ## 方式二：直接导入单个 LangGraph 入口
 

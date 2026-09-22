@@ -59,14 +59,19 @@ def load_env_file(path: str) -> None:
             os.environ.setdefault(key, value)
 
 
-def load_json_object(value: str | None, option_name: str) -> dict[str, Any]:
-    """Parse an optional command-line JSON object."""
+def load_json_value(value: str | None, option_name: str, default: Any = None) -> Any:
+    """Parse optional command-line JSON."""
     if not value:
-        return {}
+        return default
     try:
-        parsed = json.loads(value)
+        return json.loads(value)
     except json.JSONDecodeError as exc:
         raise BridgeError(f"{option_name} 不是有效的 JSON：{exc.msg}") from exc
+
+
+def load_json_object(value: str | None, option_name: str) -> dict[str, Any]:
+    """Parse an optional command-line JSON object."""
+    parsed = load_json_value(value, option_name, {})
     if not isinstance(parsed, dict):
         raise BridgeError(f"{option_name} 必须是 JSON 对象，例如：{{\"model\": \"openai/gpt-4o-mini\"}}")
     return parsed
@@ -78,30 +83,35 @@ def resolve_project_path(project_dir: Path, value: str) -> Path:
     return path if path.is_absolute() else (project_dir / path).resolve()
 
 
-def discover_langgraph_project(agent_dir: str, graph_id: str | None) -> tuple[Path, str, Path | None, list[Path]]:
-    """Read a LangGraph project and return its graph entrypoint and import paths."""
+def discover_agent_project(
+    agent_dir: str,
+    entrypoint: str | None,
+    graph_id: str | None,
+) -> tuple[Path, str, Path | None, list[Path]]:
+    """Discover a LangChain or LangGraph project without importing it."""
     project_dir = Path(agent_dir).expanduser().resolve()
     if not project_dir.is_dir():
         raise BridgeError(f"找不到 Agent 目录：{project_dir}")
 
     config_path = project_dir / "langgraph.json"
-    if not config_path.is_file():
-        raise BridgeError(f"Agent 目录中找不到 langgraph.json：{config_path}")
-    try:
-        config = json.loads(config_path.read_text(encoding="utf-8-sig"))
-    except json.JSONDecodeError as exc:
-        raise BridgeError(f"langgraph.json 格式无效：{exc.msg}") from exc
+    config: dict[str, Any] = {}
+    if config_path.is_file():
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8-sig"))
+        except json.JSONDecodeError as exc:
+            raise BridgeError(f"langgraph.json 格式无效：{exc.msg}") from exc
 
-    graphs = config.get("graphs")
-    if not isinstance(graphs, dict) or not graphs:
-        raise BridgeError("langgraph.json 中没有可用的 graphs 配置")
-    selected_id = graph_id or next(iter(graphs))
-    if selected_id not in graphs:
-        available = "、".join(str(item) for item in graphs)
-        raise BridgeError(f"找不到 Graph {selected_id!r}；可用项：{available}")
-    entrypoint = graphs[selected_id]
+    if entrypoint is None:
+        graphs = config.get("graphs")
+        if not isinstance(graphs, dict) or not graphs:
+            raise BridgeError("项目没有可自动发现的 Graph；请使用 --entrypoint 模块:属性 指定 Agent")
+        selected_id = graph_id or next(iter(graphs))
+        if selected_id not in graphs:
+            available = "、".join(str(item) for item in graphs)
+            raise BridgeError(f"找不到 Graph {selected_id!r}；可用项：{available}")
+        entrypoint = graphs[selected_id]
     if not isinstance(entrypoint, str) or ":" not in entrypoint:
-        raise BridgeError(f"Graph {selected_id!r} 的入口无效：{entrypoint!r}")
+        raise BridgeError(f"Agent 入口无效：{entrypoint!r}")
 
     import_paths = [project_dir]
     source_dir = project_dir / "src"
@@ -118,8 +128,16 @@ def discover_langgraph_project(agent_dir: str, graph_id: str | None) -> tuple[Pa
                     import_paths.append(candidate)
 
     env_value = config.get("env")
+    default_env = project_dir / ".env"
     env_path = resolve_project_path(project_dir, env_value) if isinstance(env_value, str) else None
+    if env_path is None and default_env.is_file():
+        env_path = default_env
     return project_dir, entrypoint, env_path, import_paths
+
+
+def discover_langgraph_project(agent_dir: str, graph_id: str | None) -> tuple[Path, str, Path | None, list[Path]]:
+    """Backward-compatible wrapper for standard LangGraph projects."""
+    return discover_agent_project(agent_dir, None, graph_id)
 
 
 @contextmanager
@@ -184,6 +202,8 @@ def get_nested_value(value: Any, path: str | None) -> Any:
     for part in path.split("."):
         if isinstance(current, dict) and part in current:
             current = current[part]
+        elif isinstance(current, (list, tuple)) and part.isdigit() and int(part) < len(current):
+            current = current[int(part)]
         else:
             raise BridgeError(f"Agent 返回内容中找不到字段：{path}")
     return current
@@ -205,14 +225,88 @@ def to_jsonable(value: Any) -> Any:
     return str(value)
 
 
-def final_answer(value: Any) -> Any:
-    """Extract the final assistant content from a LangGraph result when possible."""
-    if isinstance(value, dict) and value.get("messages"):
-        message = value["messages"][-1]
+def render_prompt_template(value: Any, prompt: str) -> Any:
+    """Replace {prompt} recursively inside a JSON-compatible value."""
+    if isinstance(value, str):
+        return value.replace("{prompt}", prompt)
+    if isinstance(value, dict):
+        return {key: render_prompt_template(item, prompt) for key, item in value.items()}
+    if isinstance(value, list):
+        return [render_prompt_template(item, prompt) for item in value]
+    return value
+
+
+def runnable_input_schema(runnable: Any) -> dict[str, Any]:
+    """Return a Runnable's JSON input schema when it exposes one."""
+    schema_type = None
+    get_schema = getattr(runnable, "get_input_schema", None)
+    if callable(get_schema):
+        try:
+            schema_type = get_schema()
+        except TypeError:
+            schema_type = None
+    if schema_type is None:
+        schema_type = getattr(runnable, "input_schema", None)
+    if callable(schema_type) and not isinstance(schema_type, type):
+        try:
+            schema_type = schema_type()
+        except TypeError:
+            pass
+    for method_name in ("model_json_schema", "schema"):
+        method = getattr(schema_type, method_name, None)
+        if callable(method):
+            try:
+                schema = method()
+                return schema if isinstance(schema, dict) else {}
+            except (TypeError, ValueError):
+                continue
+    return {}
+
+
+def build_runnable_input(runnable: Any, prompt: str, template: Any, input_mode: str) -> Any:
+    """Build common LangChain and LangGraph input shapes."""
+    if template is not None:
+        return render_prompt_template(template, prompt)
+    modes: dict[str, Any] = {
+        "messages": {"messages": [{"role": "user", "content": prompt}]},
+        "input": {"input": prompt},
+        "query": {"query": prompt},
+        "question": {"question": prompt},
+        "prompt": {"prompt": prompt},
+        "string": prompt,
+    }
+    if input_mode != "auto":
+        return modes[input_mode]
+
+    schema = runnable_input_schema(runnable)
+    properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+    for field in ("messages", "input", "query", "question", "prompt"):
+        if field in properties:
+            return modes[field]
+    if len(properties) == 1:
+        return {next(iter(properties)): prompt}
+    if schema.get("type") == "string":
+        return prompt
+    return modes["messages"]
+
+
+def final_answer(value: Any, output_path: str | None = None) -> Any:
+    """Extract a useful final answer from common Agent result shapes."""
+    serializable = to_jsonable(value)
+    if output_path:
+        return get_nested_value(serializable, output_path)
+    if isinstance(serializable, dict) and serializable.get("messages"):
+        message = serializable["messages"][-1]
         if isinstance(message, dict):
             return message.get("content", message)
         return getattr(message, "content", message)
-    return value
+    if isinstance(serializable, dict):
+        for field in ("output", "answer", "result", "response", "text"):
+            if field in serializable:
+                return serializable[field]
+    if isinstance(serializable, dict) and "content" in serializable:
+        return serializable["content"]
+    return serializable
 
 
 def parse_event_name(name: str) -> tuple[str | None, str | None]:
@@ -297,25 +391,66 @@ async def collect_langgraph_events(
     project_dir: Path | None = None,
     import_paths: list[Path] | None = None,
     context_values: dict[str, Any] | None = None,
+    config_values: dict[str, Any] | None = None,
+    factory_values: dict[str, Any] | None = None,
+    input_template: Any = None,
+    input_mode: str = "auto",
+    output_path: str | None = None,
+    thread_id: str | None = None,
 ) -> tuple[Any, list[dict[str, Any]], int]:
     """Import a Runnable and collect its standard LangChain v2 events."""
     with agent_import_environment(project_dir, import_paths):
         attribute = import_attribute(factory_path, project_dir)
-        runnable = attribute if hasattr(attribute, "astream_events") else attribute()
-        if not hasattr(runnable, "astream_events"):
-            raise BridgeError(f"{factory_path} 返回的对象不支持 astream_events()")
+        runnable = attribute if hasattr(attribute, "astream_events") else attribute(**(factory_values or {}))
+        if not any(hasattr(runnable, method) for method in ("astream_events", "ainvoke", "invoke")):
+            raise BridgeError(f"{factory_path} 返回的对象不是可运行的 LangChain/LangGraph Agent")
         runtime_context = create_runtime_context(runnable, context_values or {})
+        runnable_input = build_runnable_input(runnable, prompt, input_template, input_mode)
+        run_config = dict(config_values or {})
+        if thread_id:
+            configurable = dict(run_config.get("configurable") or {})
+            configurable.setdefault("thread_id", thread_id)
+            run_config["configurable"] = configurable
 
         records: dict[str, dict[str, Any]] = {}
         record_order: list[str] = []
         final_result: Any = None
         event_count = 0
+
+        if not hasattr(runnable, "astream_events"):
+            started_at = utc_now()
+            invoke_kwargs: dict[str, Any] = {}
+            if run_config:
+                invoke_kwargs["config"] = run_config
+            if runtime_context is not None:
+                invoke_kwargs["context"] = runtime_context
+            if hasattr(runnable, "ainvoke"):
+                final_result = await runnable.ainvoke(runnable_input, **invoke_kwargs)
+            else:
+                final_result = await asyncio.to_thread(runnable.invoke, runnable_input, **invoke_kwargs)
+            span = {
+                "span_id": str(uuid4()),
+                "name": getattr(runnable, "name", None) or factory_path,
+                "kind": "CHAIN",
+                "status": "OK",
+                "input": to_jsonable(runnable_input),
+                "output": to_jsonable(final_result),
+                "metadata": {"capture_mode": "invoke-fallback"},
+                "started_at": started_at,
+                "ended_at": utc_now(),
+                "error": None,
+                "parent_span_id": None,
+            }
+            return final_answer(final_result, output_path), [span], 0
+
         event_kwargs: dict[str, Any] = {"version": "v2"}
+        if run_config:
+            event_kwargs["config"] = run_config
         if runtime_context is not None:
             event_kwargs["context"] = runtime_context
 
         async for event in runnable.astream_events(
-            {"messages": [{"role": "user", "content": prompt}]},
+            runnable_input,
             **event_kwargs,
         ):
             event_count += 1
@@ -354,7 +489,7 @@ async def collect_langgraph_events(
                 if action == "end":
                     record["status"] = "OK"
                     record["output"] = to_jsonable(data.get("output"))
-                    if not event.get("parent_ids") and component == "chain":
+                    if not event.get("parent_ids"):
                         final_result = data.get("output")
                 else:
                     record["status"] = "ERROR"
@@ -377,7 +512,7 @@ async def collect_langgraph_events(
                 record["ended_at"] = utc_now()
             spans.append(record)
 
-        return final_answer(final_result), spans, event_count
+        return final_answer(final_result, output_path), spans, event_count
 
 
 def run_langgraph_agent(
@@ -388,6 +523,12 @@ def run_langgraph_agent(
     project_dir: Path | None = None,
     import_paths: list[Path] | None = None,
     context_values: dict[str, Any] | None = None,
+    config_values: dict[str, Any] | None = None,
+    factory_values: dict[str, Any] | None = None,
+    input_template: Any = None,
+    input_mode: str = "auto",
+    output_path: str | None = None,
+    thread_id: str | None = None,
 ) -> tuple[Any, dict[str, Any], bool, list[dict[str, Any]]]:
     """Run a LangGraph Runnable in-process and preserve its internal events."""
     started = time.perf_counter()
@@ -400,6 +541,12 @@ def run_langgraph_agent(
                     project_dir=project_dir,
                     import_paths=import_paths,
                     context_values=context_values,
+                    config_values=config_values,
+                    factory_values=factory_values,
+                    input_template=input_template,
+                    input_mode=input_mode,
+                    output_path=output_path,
+                    thread_id=thread_id,
                 ),
                 timeout=timeout,
             )
@@ -421,6 +568,8 @@ def run_langgraph_agent(
         "adapter": "langgraph-events",
         "factory": factory_path,
         "agent_dir": str(project_dir) if project_dir else None,
+        "input_mode": input_mode,
+        "output_path": output_path,
         "event_count": event_count,
         "captured_spans": len(spans),
         "duration_ms": round((time.perf_counter() - started) * 1000, 2),
@@ -592,8 +741,21 @@ def build_parser() -> argparse.ArgumentParser:
     agent.add_argument("--command", help='本地命令，例如：python my_agent.py（prompt 默认从 stdin 传入）')
     agent.add_argument("--agent-url", help="本地 Agent 的 HTTP POST 地址")
     agent.add_argument("--langgraph", help="可导入的 LangGraph 工厂，格式为 模块:函数")
-    agent.add_argument("--agent-dir", help="标准 LangGraph 项目目录；自动读取 langgraph.json")
+    agent.add_argument("--runnable", help="可导入的 LangChain Runnable/AgentExecutor，格式为 模块:属性")
+    agent.add_argument("--agent-dir", help="LangChain/LangGraph 项目目录")
+    parser.add_argument("--entrypoint", help="Agent 入口；可覆盖 langgraph.json，例如 package.agent:executor")
     parser.add_argument("--graph-id", help="langgraph.json 中的 Graph 名称；不填时使用第一项")
+    parser.add_argument(
+        "--input-mode",
+        choices=("auto", "messages", "input", "query", "question", "prompt", "string"),
+        default="auto",
+        help="Agent 输入形式；auto 会读取 Runnable 输入 Schema",
+    )
+    parser.add_argument("--input-json", help='自定义输入 JSON；字符串中的 {prompt} 会替换为问题')
+    parser.add_argument("--output-path", help="从结果中提取最终回答的字段路径，例如 output 或 data.answer")
+    parser.add_argument("--config-json", help="RunnableConfig JSON，例如 configurable、tags 和 metadata")
+    parser.add_argument("--factory-json", help="创建 Agent 工厂函数时传入的关键字参数 JSON")
+    parser.add_argument("--thread-id", help="LangGraph checkpointer 使用的 thread_id；默认使用 Session ID 或随机值")
     parser.add_argument(
         "--context-json",
         help='传给 LangGraph Context 的 JSON 对象，例如：{"model":"openai/gpt-4o-mini"}',
@@ -622,16 +784,20 @@ def main() -> int:
     try:
         graph_project_dir: Path | None = None
         graph_import_paths: list[Path] = []
-        graph_entrypoint = args.langgraph
+        graph_entrypoint = args.langgraph or args.runnable
         automatic_env_path: Path | None = None
         if args.agent_dir:
-            graph_project_dir, graph_entrypoint, automatic_env_path, graph_import_paths = discover_langgraph_project(
-                args.agent_dir, args.graph_id
+            graph_project_dir, graph_entrypoint, automatic_env_path, graph_import_paths = discover_agent_project(
+                args.agent_dir, args.entrypoint, args.graph_id
             )
         env_path = Path(args.env_file).expanduser().resolve() if args.env_file else automatic_env_path
         if env_path is not None:
             load_env_file(str(env_path))
         context_values = load_json_object(args.context_json, "--context-json")
+        config_values = load_json_object(args.config_json, "--config-json")
+        factory_values = load_json_object(args.factory_json, "--factory-json")
+        input_template = load_json_value(args.input_json, "--input-json")
+        thread_id = args.thread_id or args.session_id or str(uuid4())
         started_at = utc_now()
         detailed_spans: list[dict[str, Any]] = []
         if args.command:
@@ -650,6 +816,12 @@ def main() -> int:
                 project_dir=graph_project_dir,
                 import_paths=graph_import_paths,
                 context_values=context_values,
+                config_values=config_values,
+                factory_values=factory_values,
+                input_template=input_template,
+                input_mode=args.input_mode,
+                output_path=args.output_path,
+                thread_id=thread_id,
             )
         ended_at = utc_now()
         headers = panda_headers(args)

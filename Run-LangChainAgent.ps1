@@ -8,6 +8,14 @@ param(
     [string]$Name = "LangGraph Agent",
     [string]$SessionId,
     [string]$GraphId,
+    [string]$Entrypoint,
+    [ValidateSet("auto", "messages", "input", "query", "question", "prompt", "string")]
+    [string]$InputMode = "auto",
+    [string]$InputJson,
+    [string]$OutputPath,
+    [string]$ConfigJson,
+    [string]$FactoryJson,
+    [string]$ThreadId,
     [string]$ContextJson,
     [string]$ProjectName = "onboarding",
     [switch]$Evaluate
@@ -30,6 +38,7 @@ $bridgeArgs = @(
     "--agent-dir", $resolvedAgentDir,
     "--prompt", $Prompt,
     "--name", $Name,
+    "--input-mode", $InputMode,
     "--project-name", $ProjectName
 )
 if ($SessionId) {
@@ -37,6 +46,24 @@ if ($SessionId) {
 }
 if ($GraphId) {
     $bridgeArgs += @("--graph-id", $GraphId)
+}
+if ($Entrypoint) {
+    $bridgeArgs += @("--entrypoint", $Entrypoint)
+}
+if ($InputJson) {
+    $bridgeArgs += @("--input-json", $InputJson)
+}
+if ($OutputPath) {
+    $bridgeArgs += @("--output-path", $OutputPath)
+}
+if ($ConfigJson) {
+    $bridgeArgs += @("--config-json", $ConfigJson)
+}
+if ($FactoryJson) {
+    $bridgeArgs += @("--factory-json", $FactoryJson)
+}
+if ($ThreadId) {
+    $bridgeArgs += @("--thread-id", $ThreadId)
 }
 if ($ContextJson) {
     $bridgeArgs += @("--context-json", $ContextJson)
