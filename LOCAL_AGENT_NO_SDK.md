@@ -2,7 +2,84 @@
 
 `tools/local_agent_eval.py` 是一个只使用 Python 标准库的本地适配器。它运行你的 Agent，收集输入、输出、耗时和错误，通过 PandaProbe REST API 创建 Trace，并可立即发起 LLM 评测。你的 Agent 本身不需要引入 PandaProbe SDK。
 
-## 方式一：Agent 是本地命令
+## 方式一：直接加载标准 LangGraph 项目（推荐）
+
+如果 Agent 目录中有 `langgraph.json`，只需把目录传给 `--agent-dir`。适配器会自动读取 Graph 入口、项目 `.env`、`src` 源码目录和默认运行时 Context，并捕获 LLM、工具、检索器和节点事件，不需要修改 Agent 代码。
+
+本仓库中的 `react-agent-main` 可以这样运行：
+
+```powershell
+.\Run-LangGraphProject.ps1 `
+  -AgentDir "C:\Users\carol\Desktop\pandaprobe-main\pandaprobe-main\test\react-agent-main\react-agent-main" `
+  -Prompt "Who founded LangChain?" `
+  -Name "ReAct Search Agent" `
+  -Evaluate
+```
+
+启动脚本会优先使用 Agent 目录中的 `.venv` 或 `venv`，避免不同 Agent 的依赖相互冲突。
+
+项目需要先有自己的 `.env`，并在运行适配器的 Python 环境中安装它自身的依赖。如果 `langgraph.json` 定义了多个 Graph，用 `--graph-id agent` 指定其中一个。需要覆盖 Context 时，可以传入 JSON：
+
+```powershell
+python tools/local_agent_eval.py `
+  --agent-dir "C:\path\to\langgraph-agent" `
+  --context-json '{"model":"openai/gpt-4o-mini","max_search_results":5}' `
+  --prompt "Search for the latest LangGraph release"
+```
+
+不写 `--metric` 时只运行 Agent 并记录完整 Trace，不会产生评测模型费用。
+
+## 方式二：直接导入单个 LangGraph 入口
+
+如果 Agent 对外提供一个返回已编译 graph 的函数，可以让适配器直接捕获 LLM、工具、检索器和节点事件。项目里的 `test.py` 已提供 `build_agent()`，运行：
+
+最简单的运行方式：
+
+```powershell
+.\Test-LangGraphAgent.ps1 "What's the weather in Tokyo?"
+```
+
+同时运行三个适合工具型 Agent 的评测指标：
+
+```powershell
+.\Test-LangGraphAgent.ps1 "What's the weather in Tokyo?" -Evaluate
+```
+
+等价的完整命令是：
+
+```powershell
+python tools/local_agent_eval.py `
+  --langgraph test:build_agent `
+  --env-file backend/.env.development `
+  --prompt "What's the weather in Tokyo?" `
+  --metric task_completion `
+  --metric tool_correctness `
+  --metric argument_correctness
+```
+
+此模式会把 `on_tool_start/end`、`on_chat_model_start/end`、`on_chain_start/end` 和检索事件转换成 PandaProbe Spans。
+
+## 创建并评测 Session
+
+多次运行时传入相同的 Session ID，PandaProbe 会自动把这些 Trace 合并为一个 Session：
+
+```powershell
+.\Test-LangGraphAgent.ps1 "What's the weather in Tokyo?" -SessionId weather-demo
+.\Test-LangGraphAgent.ps1 "What about Shanghai?" -SessionId weather-demo
+```
+
+标准 LangGraph 项目同样使用 `--session-id`：
+
+```powershell
+python tools/local_agent_eval.py `
+  --agent-dir "C:\path\to\langgraph-agent" `
+  --prompt "First test question" `
+  --session-id "agent-comparison-01"
+```
+
+随后在网页的 **Session** 页面选择 `weather-demo`，点击 **评估**，选择 **Agent 一致性** 或 **Agent 可靠性**。
+
+## 方式三：Agent 是本地命令
 
 Agent 从标准输入读取问题，并把最终答案输出到标准输出：
 
@@ -20,7 +97,7 @@ python tools/local_agent_eval.py `
   --prompt "请总结这个项目的作用"
 ```
 
-## 方式二：Agent 是本地 HTTP 接口
+## 方式四：Agent 是本地 HTTP 接口
 
 默认发送 `{"prompt": "..."}`。下面的例子从响应 `{"data": {"answer": "..."}}` 中取出答案：
 

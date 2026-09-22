@@ -21,15 +21,11 @@ import { MetadataSection } from "@/components/common/ScoreRow";
 import { Badge } from "@/components/ui/Badge";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { formatDateTime, formatRelativeTime } from "@/lib/utils/format";
+import { dataTypeLabel, metricLabel, sourceLabel } from "@/lib/utils/labels";
 
 type ScoreItem = TraceScoreResponse | SessionScoreResponse;
 type SourceVariant =
-  | "default"
-  | "success"
-  | "warning"
-  | "error"
-  | "info"
-  | "primary";
+  "default" | "success" | "warning" | "error" | "info" | "primary";
 
 interface ScoreListTableProps {
   mode: "trace" | "session";
@@ -63,32 +59,32 @@ export function ScoreListTable({
       <table className="w-full text-xs font-mono">
         <thead className="sticky top-0 z-10 bg-surface-hi">
           <tr className="border-b border-border">
-            <th className="w-8" aria-label="Expand" />
+            <th className="w-8" aria-label="展开" />
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Metric
+              指标
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Value
+              数值
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Status
+              状态
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Source
+              来源
             </th>
             {mode === "trace" && (
               <th className="text-left px-3 py-2 text-text-muted font-normal">
-                Env
+                环境
               </th>
             )}
             <th className="text-left px-3 py-2 text-text-muted font-normal">
               {targetLabel}
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Run
+              运行
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Created
+              创建时间
             </th>
           </tr>
         </thead>
@@ -187,7 +183,7 @@ function ScoreListRow({
               e.stopPropagation();
               toggle();
             }}
-            aria-label={expanded ? "Collapse row" : "Expand row"}
+            aria-label={expanded ? "收起行" : "展开行"}
             className="text-text-muted hover:text-text flex items-center justify-center"
           >
             {expanded ? (
@@ -198,7 +194,7 @@ function ScoreListRow({
           </button>
         </td>
         <td className="px-3 py-2 max-w-[200px] truncate text-warning font-medium">
-          {score.name}
+          {metricLabel(score.name)}
         </td>
         <td className="px-3 py-2 max-w-[160px] truncate text-text">
           {score.value ?? <span className="text-text-muted">—</span>}
@@ -207,7 +203,9 @@ function ScoreListRow({
           <StatusBadge status={score.status} />
         </td>
         <td className="px-3 py-2">
-          <Badge variant={sourceVariant(score.source)}>{score.source}</Badge>
+          <Badge variant={sourceVariant(score.source)}>
+            {sourceLabel(score.source)}
+          </Badge>
         </td>
         {mode === "trace" && (
           <td className="px-3 py-2 max-w-[140px] truncate text-text-dim">
@@ -226,22 +224,18 @@ function ScoreListRow({
               type="button"
               onClick={handleNavigateTarget}
               className="truncate text-text-dim hover:text-text hover:underline underline-offset-2 min-w-0 text-left"
-              title={`Open ${mode === "trace" ? "trace" : "session"}: ${targetId}`}
+              title={`打开${mode === "trace" ? "Trace" : "Session"}：${targetId}`}
             >
               {targetId}
             </button>
             <Tooltip
-              content={
-                copiedTarget
-                  ? "Copied!"
-                  : `Copy ${targetLabel.toLowerCase()} ID`
-              }
+              content={copiedTarget ? "已复制" : `复制${targetLabel} ID`}
             >
               <button
                 type="button"
                 onClick={handleCopyTarget}
                 className="text-text-muted hover:text-text transition-opacity opacity-0 group-hover/cell:opacity-100 focus:opacity-100 flex-shrink-0"
-                aria-label={`Copy ${targetLabel.toLowerCase()} ID`}
+                aria-label={`复制${targetLabel} ID`}
               >
                 {copiedTarget ? (
                   <Check className="h-3 w-3 text-success" />
@@ -263,16 +257,16 @@ function ScoreListRow({
                 type="button"
                 onClick={handleOpenRun}
                 className="truncate text-text-dim hover:text-text hover:underline underline-offset-2 min-w-0 text-left"
-                title={`Open evaluation run: ${runId}`}
+                title={`打开评估运行：${runId}`}
               >
                 {runId}
               </button>
-              <Tooltip content={copiedRun ? "Copied!" : "Copy run ID"}>
+              <Tooltip content={copiedRun ? "已复制" : "复制运行 ID"}>
                 <button
                   type="button"
                   onClick={handleCopyRun}
                   className="text-text-muted hover:text-text transition-opacity opacity-0 group-hover/cell:opacity-100 focus:opacity-100 flex-shrink-0"
-                  aria-label="Copy run ID"
+                  aria-label="复制运行 ID"
                 >
                   {copiedRun ? (
                     <Check className="h-3 w-3 text-success" />
@@ -326,7 +320,7 @@ function ExpandedRowDetails({
           <MessageSquareText className="h-3 w-3 text-text-muted mt-0.5 flex-shrink-0" />
           <div className="min-w-0">
             <div className="text-[10px] font-mono text-text-muted uppercase tracking-wider mb-0.5">
-              Reasoning
+              评估理由
             </div>
             <p className="text-xs font-mono text-text-dim whitespace-pre-wrap break-words">
               {score.reason}
@@ -340,13 +334,13 @@ function ExpandedRowDetails({
       )}
 
       <div className="grid grid-cols-2 gap-3 text-[11px] font-mono">
-        <DetailRow label="Data type">
+        <DetailRow label="数据类型">
           <Badge variant="default" className="text-[10px]">
-            {score.data_type}
+            {dataTypeLabel(score.data_type)}
           </Badge>
         </DetailRow>
         {score.author_user_id && (
-          <DetailRow label="Author">
+          <DetailRow label="作者">
             <span className="inline-flex items-center gap-1 text-text-dim min-w-0">
               <User className="h-2.5 w-2.5 flex-shrink-0" />
               <span className="truncate">{score.author_user_id}</span>
@@ -354,24 +348,24 @@ function ExpandedRowDetails({
           </DetailRow>
         )}
         {traceScore?.config_id && (
-          <DetailRow label="Config">
+          <DetailRow label="配置">
             <span className="inline-flex items-center gap-1 text-text-dim min-w-0">
               <Settings className="h-2.5 w-2.5 flex-shrink-0" />
               <span className="truncate">{traceScore.config_id}</span>
             </span>
           </DetailRow>
         )}
-        <DetailRow label="Score ID">
+        <DetailRow label="分数 ID">
           <span className="inline-flex items-center gap-1 text-text-dim min-w-0 w-full">
             <span className="truncate" title={score.id}>
               {score.id}
             </span>
-            <Tooltip content={copiedScoreId ? "Copied!" : "Copy score ID"}>
+            <Tooltip content={copiedScoreId ? "已复制" : "复制分数 ID"}>
               <button
                 type="button"
                 onClick={onCopyScoreId}
                 className="text-text-muted hover:text-text flex-shrink-0"
-                aria-label="Copy score ID"
+                aria-label="复制分数 ID"
               >
                 {copiedScoreId ? (
                   <Check className="h-3 w-3 text-success" />
@@ -382,7 +376,7 @@ function ExpandedRowDetails({
             </Tooltip>
           </span>
         </DetailRow>
-        <DetailRow label="Updated">
+        <DetailRow label="更新时间">
           <span className="inline-flex items-center gap-1 text-text-dim">
             <RefreshCw className="h-2.5 w-2.5" />
             {formatDateTime(score.updated_at)}

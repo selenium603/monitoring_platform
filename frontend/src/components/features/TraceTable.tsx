@@ -90,29 +90,29 @@ export function TraceTable({
               </th>
             )}
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Name
+              名称
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Status
+              状态
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Latency
+              延迟
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Tokens
+              Token
             </th>
             {/* TODO(cost): Restore Cost column once trace cost computation is implemented. */}
             {/* <th className="text-left px-3 py-2 text-text-muted font-normal">
               Cost
             </th> */}
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Spans
+              Span 数
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Started
+              开始时间
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Tags
+              标签
             </th>
           </tr>
         </thead>

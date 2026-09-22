@@ -38,7 +38,7 @@ export function ScoresSidebar({
       >
         <div className="flex items-center justify-between h-12 px-4 border-b border-border flex-shrink-0">
           <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider">
-            Scores · {scores.length}
+            分数 · {scores.length}
           </h2>
           <div className="flex items-center gap-1">
             {onRefresh && (
@@ -47,8 +47,8 @@ export function ScoresSidebar({
                 size="icon"
                 onClick={onRefresh}
                 disabled={isRefreshing}
-                aria-label="Refresh scores"
-                title="Refresh scores"
+                aria-label="刷新分数"
+                title="刷新分数"
               >
                 <RefreshCw
                   className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
@@ -64,7 +64,7 @@ export function ScoresSidebar({
         <div className="flex-1 min-h-0 overflow-y-auto">
           {scores.length === 0 ? (
             <div className="flex items-center justify-center h-full text-xs text-text-muted font-mono">
-              No scores available
+              暂无可用分数
             </div>
           ) : (
             <div className="divide-y divide-border">

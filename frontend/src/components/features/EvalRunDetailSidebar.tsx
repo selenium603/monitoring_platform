@@ -50,6 +50,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useEvalRunTracker } from "@/components/providers/EvalRunTrackerProvider";
 import { extractErrorMessage } from "@/lib/api/client";
 import { ScoreRow, type ScoreItem } from "@/components/common/ScoreRow";
+import { filterLabel, labelFor, metricLabel } from "@/lib/utils/labels";
 
 const POLL_INTERVAL_MS = 3000;
 const TERMINAL_STATES: ReadonlySet<string> = new Set([
@@ -165,7 +166,7 @@ export function EvalRunDetailSidebar({
         mode,
         targetIds: [],
       });
-      toast({ title: "Run retried", variant: "success" });
+      toast({ title: "已重新运行评估", variant: "success" });
       await queryClient.invalidateQueries({
         queryKey: [mode === "trace" ? "traceRuns" : "sessionRuns"],
       });
@@ -188,7 +189,7 @@ export function EvalRunDetailSidebar({
       } else {
         await deleteSessionRun(runId, deleteScoresToo);
       }
-      toast({ title: "Run deleted", variant: "success" });
+      toast({ title: "评估运行已删除", variant: "success" });
       await queryClient.invalidateQueries({
         queryKey: [mode === "trace" ? "traceRuns" : "sessionRuns"],
       });
@@ -203,7 +204,8 @@ export function EvalRunDetailSidebar({
     }
   }
 
-  const title = run?.name || (run ? `Run ${run.id.slice(0, 8)}` : "Run");
+  const title =
+    run?.name || (run ? `评估运行 ${run.id.slice(0, 8)}` : "评估运行");
   const isRefreshing =
     runQuery.isFetching || (scoresOpen && scoresQuery.isFetching);
   const hasFetchedScores = scoresQuery.data !== undefined;
@@ -230,8 +232,8 @@ export function EvalRunDetailSidebar({
               size="icon"
               onClick={refreshAll}
               disabled={!runId || isRefreshing}
-              aria-label="Refresh"
-              title="Refresh"
+              aria-label="刷新"
+              title="刷新"
             >
               <RefreshCw
                 className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
@@ -246,7 +248,7 @@ export function EvalRunDetailSidebar({
         <div className="flex-1 min-h-0 overflow-y-auto">
           {!runId ? null : runQuery.isPending ? (
             <div className="flex items-center justify-center h-24 text-xs text-text-muted font-mono">
-              Loading run…
+              正在加载评估运行…
             </div>
           ) : runQuery.error ? (
             <div className="p-4 text-xs font-mono text-error">
@@ -257,41 +259,41 @@ export function EvalRunDetailSidebar({
               <div className="px-4 py-3 border-b border-border space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <StatusBadge status={run.status} />
-                  <Badge variant="default">{run.target_type}</Badge>
+                  <Badge variant="default">{labelFor(run.target_type)}</Badge>
                   {run.monitor_id && (
                     <Badge
                       variant="default"
                       className="flex items-center gap-1"
                     >
                       <Radio className="h-2.5 w-2.5" />
-                      monitor
+                      监控
                     </Badge>
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                  <KVRow label="Progress">
+                  <KVRow label="进度">
                     <span className="text-text">
                       {run.evaluated_count}/{run.total_targets}
                     </span>
                     {run.failed_count > 0 && (
                       <span className="text-error ml-1">
-                        ({run.failed_count} failed)
+                        （{run.failed_count} 个失败）
                       </span>
                     )}
                   </KVRow>
-                  <KVRow label="Sampling">
+                  <KVRow label="采样比例">
                     <span className="text-text">
                       {formatSamplingRate(run.sampling_rate)}
                     </span>
                   </KVRow>
-                  <KVRow label="Model">
+                  <KVRow label="模型">
                     <span className="text-text truncate">
                       {run.model ?? (
-                        <span className="text-text-muted">default</span>
+                        <span className="text-text-muted">默认</span>
                       )}
                     </span>
                   </KVRow>
-                  <KVRow label="Run ID" truncate={false}>
+                  <KVRow label="运行 ID" truncate={false}>
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span
                         className="text-text-dim truncate min-w-0"
@@ -299,11 +301,11 @@ export function EvalRunDetailSidebar({
                       >
                         {run.id}
                       </span>
-                      <Tooltip content={copiedId ? "Copied!" : "Copy run ID"}>
+                      <Tooltip content={copiedId ? "已复制" : "复制运行 ID"}>
                         <button
                           className="text-text-muted hover:text-text transition-colors flex-shrink-0"
                           onClick={handleCopyId}
-                          aria-label="Copy run ID"
+                          aria-label="复制运行 ID"
                         >
                           {copiedId ? (
                             <Check className="h-3 w-3 text-success" />
@@ -314,13 +316,13 @@ export function EvalRunDetailSidebar({
                       </Tooltip>
                     </div>
                   </KVRow>
-                  <KVRow label="Created">
+                  <KVRow label="创建时间">
                     <span className="text-text flex items-center gap-1">
                       <Clock className="h-2.5 w-2.5" />
                       {formatDateTime(run.created_at)}
                     </span>
                   </KVRow>
-                  <KVRow label="Completed">
+                  <KVRow label="完成时间">
                     {run.completed_at ? (
                       <span className="text-text flex items-center gap-1">
                         <Clock className="h-2.5 w-2.5" />
@@ -335,17 +337,17 @@ export function EvalRunDetailSidebar({
 
               <div className="px-4 py-3 border-b border-border">
                 <label className="block text-[10px] font-mono text-text-muted uppercase tracking-wider mb-1.5">
-                  Metrics
+                  指标
                 </label>
                 <div className="flex gap-1 flex-wrap">
                   {run.metric_names.length === 0 ? (
                     <span className="text-[11px] font-mono text-text-muted">
-                      None
+                      无
                     </span>
                   ) : (
                     run.metric_names.map((m) => (
                       <Badge key={m} variant="info">
-                        {m}
+                        {metricLabel(m)}
                       </Badge>
                     ))
                   )}
@@ -356,7 +358,7 @@ export function EvalRunDetailSidebar({
                 <div className="px-4 py-3 border-b border-border">
                   <label className="flex items-center gap-1 text-[10px] font-mono text-text-muted uppercase tracking-wider mb-1.5">
                     <Filter className="h-2.5 w-2.5" />
-                    Filters
+                    筛选条件
                   </label>
                   <div className="border border-border/40">
                     <table className="text-[11px] font-mono w-full border-collapse">
@@ -367,7 +369,7 @@ export function EvalRunDetailSidebar({
                             className="border-b border-border/40 last:border-0"
                           >
                             <td className="text-text-muted px-2 py-0.5 whitespace-nowrap align-top border-r border-border/40">
-                              {key}
+                              {filterLabel(key)}
                             </td>
                             <td className="text-text px-2 py-0.5 break-all">
                               {val}
@@ -383,7 +385,7 @@ export function EvalRunDetailSidebar({
               {run.error_message && (
                 <div className="px-4 py-3 border-b border-border">
                   <label className="block text-[10px] font-mono text-text-muted uppercase tracking-wider mb-1.5">
-                    Error
+                    错误
                   </label>
                   <div className="bg-error/5 border border-error/20 p-2">
                     <span className="text-[11px] font-mono text-error whitespace-pre-wrap">
@@ -405,7 +407,7 @@ export function EvalRunDetailSidebar({
                   ) : (
                     <RotateCw className="h-3 w-3" />
                   )}
-                  Retry
+                  重试
                 </Button>
                 <Button
                   variant="destructive"
@@ -418,7 +420,7 @@ export function EvalRunDetailSidebar({
                   ) : (
                     <Trash2 className="h-3 w-3" />
                   )}
-                  Delete
+                  删除
                 </Button>
               </div>
 
@@ -435,7 +437,7 @@ export function EvalRunDetailSidebar({
                     ) : (
                       <ChevronRight className="h-3 w-3" />
                     )}
-                    Scores
+                    分数
                     {hasFetchedScores && (
                       <span className="text-info normal-case tracking-normal">
                         · {scores.length}
@@ -454,13 +456,13 @@ export function EvalRunDetailSidebar({
                       </div>
                     ) : !hasFetchedScores ? (
                       <div className="p-4 text-xs font-mono text-text-muted">
-                        Loading scores…
+                        正在加载分数…
                       </div>
                     ) : scores.length === 0 ? (
                       <div className="p-4 text-xs font-mono text-text-muted">
                         {TERMINAL_STATES.has(run.status)
-                          ? "This run produced no scores."
-                          : "Scores will appear here as they are produced."}
+                          ? "本次运行没有产生分数。"
+                          : "分数生成后会显示在这里。"}
                       </div>
                     ) : (
                       <div className="divide-y divide-border">
@@ -479,7 +481,7 @@ export function EvalRunDetailSidebar({
                       onClick={onClose}
                       className="flex items-center justify-between gap-2 px-4 py-3 border-t border-border text-xs font-mono text-text-dim hover:text-text hover:bg-surface-hi transition-colors"
                     >
-                      <span>View full scores list for this run</span>
+                      <span>查看本次运行的完整分数列表</span>
                       <ArrowRight className="h-3 w-3 flex-shrink-0" />
                     </Link>
                   </>
@@ -496,9 +498,9 @@ export function EvalRunDetailSidebar({
           if (!v && actionPending === "retry") return;
           setConfirmRetry(v);
         }}
-        title="Retry run"
-        description="A new evaluation run will be queued with the same configuration. Continue?"
-        confirmLabel="Retry"
+        title="重新运行评估"
+        description="将使用相同配置创建新的评估运行。确定继续吗？"
+        confirmLabel="重试"
         onConfirm={handleRetry}
       />
 
@@ -509,21 +511,21 @@ export function EvalRunDetailSidebar({
           setConfirmDelete(v);
           if (!v) setDeleteScoresToo(false);
         }}
-        title="Delete run"
+        title="删除评估运行"
         description={
           <div className="space-y-3">
-            <p>Delete this evaluation run? This action cannot be undone.</p>
+            <p>确定要删除此评估运行吗？此操作无法撤销。</p>
             <label className="flex items-center gap-2 text-xs font-mono text-text-muted cursor-pointer">
               <input
                 type="checkbox"
                 checked={deleteScoresToo}
                 onChange={(e) => setDeleteScoresToo(e.target.checked)}
               />
-              <span>Also delete scores produced by this run</span>
+              <span>同时删除本次运行产生的分数</span>
             </label>
           </div>
         }
-        confirmLabel="Delete"
+        confirmLabel="删除"
         onConfirm={handleDelete}
         destructive
       />
@@ -564,6 +566,7 @@ function formatSamplingRate(rate: number): string {
 function formatFilterValue(v: unknown): string {
   if (v === null || v === undefined) return "—";
   if (Array.isArray(v)) return v.map((x) => String(x)).join(", ");
+  if (typeof v === "boolean") return v ? "是" : "否";
   if (typeof v === "object") return JSON.stringify(v);
   return String(v);
 }

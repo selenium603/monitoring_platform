@@ -117,7 +117,7 @@ function BackToHomeButton({
       )}
     >
       <ArrowLeft className="h-4 w-4" />
-      {!collapsed && <span>Back to Home</span>}
+      {!collapsed && <span>返回首页</span>}
     </Button>
   );
 
@@ -131,7 +131,7 @@ function BackToHomeButton({
             sideOffset={8}
             className="z-50 bg-surface border border-border px-2 py-1 text-xs font-mono text-text"
           >
-            Back to Home
+            返回首页
           </Tooltip.Content>
         </Tooltip.Portal>
       </Tooltip.Root>
@@ -282,28 +282,28 @@ export function Sidebar() {
   const projectNav = useMemo<NavItem[]>(
     () => [
       {
-        label: "Home",
+        label: "首页",
         href: projectHome,
         icon: <LayoutDashboard className="h-4 w-4" />,
         exact: true,
       },
       {
-        label: "Traces",
+        label: "Trace",
         href: projectBase ? `${projectBase}/traces` : orgBase,
         icon: <ListTree className="h-4 w-4" />,
       },
       {
-        label: "Sessions",
+        label: "Session",
         href: projectBase ? `${projectBase}/sessions` : orgBase,
         icon: <Layers className="h-4 w-4" />,
       },
       {
-        label: "Evaluations",
+        label: "评估",
         href: projectBase ? `${projectBase}/evaluations` : orgBase,
         icon: <CheckCircle className="h-4 w-4" />,
       },
       {
-        label: "Analytics",
+        label: "分析",
         href: projectBase ? `${projectBase}/analytics` : orgBase,
         icon: <BarChart3 className="h-4 w-4" />,
       },
@@ -405,7 +405,7 @@ export function Sidebar() {
     if (!newOrgName.trim()) return;
     try {
       const org = await createOrganization({ name: newOrgName.trim() });
-      toast({ title: "Organization created", variant: "success" });
+      toast({ title: "组织已创建", variant: "success" });
       setNewOrgName("");
       refetchOrgs();
       router.push(`/org/${org.id}/settings/organization`);
@@ -505,14 +505,14 @@ export function Sidebar() {
               <BackToHomeButton collapsed={collapsed} onClick={exitSettings} />
               {/* Org switcher at top of settings view */}
               <SwitcherDropdown
-                label={activeOrg?.name ?? "Select org"}
+                label={activeOrg?.name ?? "选择组织"}
                 icon={<Building2 className="h-4 w-4" />}
                 items={organizations.map((o) => ({ id: o.id, name: o.name }))}
                 activeId={activeOrg?.id ?? null}
                 onSelect={switchOrg}
                 collapsed={collapsed}
                 footerAction={{
-                  label: "New Organization",
+                  label: "新建组织",
                   icon: <Plus className="h-3.5 w-3.5" />,
                   onSelect: () => setCreateOrgOpen(true),
                 }}
@@ -534,7 +534,7 @@ export function Sidebar() {
               {/* Project switcher at top of main view */}
               {projects.length > 0 ? (
                 <SwitcherDropdown
-                  label={currentProjectName ?? "Select project"}
+                  label={currentProjectName ?? "选择项目"}
                   icon={<FolderKanban className="h-4 w-4" />}
                   items={projects.map((p) => ({ id: p.id, name: p.name }))}
                   activeId={resolvedProjectId}
@@ -543,7 +543,7 @@ export function Sidebar() {
                 />
               ) : !collapsed ? (
                 <div className="px-3 py-2 text-xs font-mono text-text-muted">
-                  No projects yet
+                  暂无项目
                 </div>
               ) : null}
 
@@ -575,7 +575,7 @@ export function Sidebar() {
                     )}
                   >
                     <Sparkles className="h-4 w-4" />
-                    {!collapsed && <span>Upgrade</span>}
+                    {!collapsed && <span>升级</span>}
                   </Link>
                 </Tooltip.Trigger>
                 {collapsed && (
@@ -585,7 +585,7 @@ export function Sidebar() {
                       sideOffset={8}
                       className="z-50 bg-surface border border-border px-2 py-1 text-xs font-mono text-text"
                     >
-                      Upgrade
+                      升级
                     </Tooltip.Content>
                   </Tooltip.Portal>
                 )}
@@ -602,7 +602,7 @@ export function Sidebar() {
                   )}
                 >
                   <Settings className="h-4 w-4" />
-                  {!collapsed && <span>Settings</span>}
+                  {!collapsed && <span>设置</span>}
                 </Button>
               </Tooltip.Trigger>
               {collapsed && (
@@ -612,7 +612,7 @@ export function Sidebar() {
                     sideOffset={8}
                     className="z-50 bg-surface border border-border px-2 py-1 text-xs font-mono text-text"
                   >
-                    Settings
+                    设置
                   </Tooltip.Content>
                 </Tooltip.Portal>
               )}
@@ -654,14 +654,14 @@ export function Sidebar() {
                     onSelect={() => router.push("/settings/account")}
                   >
                     <Mail className="h-3.5 w-3.5" />
-                    Account & Invitations
+                    账户与邀请
                   </DropdownMenu.Item>
                   <DropdownMenu.Item
                     className="flex items-center gap-2 px-2 py-1.5 text-xs font-mono text-text-dim hover:text-text hover:bg-surface-hi cursor-pointer outline-none"
                     onSelect={() => window.open(DOCS_URL, "_blank")}
                   >
                     <Book className="h-3.5 w-3.5" />
-                    Documentation
+                    文档
                   </DropdownMenu.Item>
                   <DropdownMenu.Item
                     className="flex items-center gap-2 px-2 py-1.5 text-xs font-mono text-text-dim hover:text-text hover:bg-surface-hi cursor-pointer outline-none"
@@ -670,7 +670,7 @@ export function Sidebar() {
                     }
                   >
                     <Bug className="h-3.5 w-3.5" />
-                    Report a bug
+                    报告问题
                   </DropdownMenu.Item>
                   <DropdownMenu.Separator className="my-1 mx-1 border-t border-border" />
                   <DropdownMenu.Item
@@ -678,7 +678,7 @@ export function Sidebar() {
                     onSelect={() => signOut()}
                   >
                     <LogOut className="h-3.5 w-3.5" />
-                    Sign out
+                    退出登录
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
@@ -703,20 +703,20 @@ export function Sidebar() {
           setCreateOrgOpen(v);
           if (!v) setNewOrgName("");
         }}
-        title="Create Organization"
-        description="Organizations are isolated workspaces for your projects, traces, and team members. You can own up to 2 organizations."
-        submitLabel="Create"
+        title="创建组织"
+        description="组织是项目、Trace 和团队成员的独立工作空间。每个账户最多可拥有 2 个组织。"
+        submitLabel="创建"
         submitDisabled={!newOrgName.trim()}
         onSubmit={handleCreateOrg}
       >
         <div>
           <label className="text-xs font-mono text-text-muted block mb-1">
-            Organization Name
+            组织名称
           </label>
           <Input
             value={newOrgName}
             onChange={(e) => setNewOrgName(e.target.value)}
-            placeholder="My Organization"
+            placeholder="我的组织"
             autoFocus
           />
         </div>

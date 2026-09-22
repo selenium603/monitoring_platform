@@ -42,6 +42,7 @@ import { useUrlState } from "@/hooks/useUrlState";
 import { useLastVisitedRow } from "@/hooks/useVisitedRows";
 import { extractErrorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/utils/cn";
+import { labelFor } from "@/lib/utils/labels";
 
 const URL_CONFIG = {
   page: { default: "1" },
@@ -66,7 +67,7 @@ export default function TracesPage() {
   const { values, set, page, limit, offset, setPage, totalPages } =
     useUrlState(URL_CONFIG);
 
-  useDocumentTitle("Traces");
+  useDocumentTitle("Trace 列表");
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { lastVisited, restoredPage, markVisited } =
@@ -140,7 +141,7 @@ export default function TracesPage() {
     if (selected.size === 0) return;
     try {
       await batchDeleteTraces({ trace_ids: Array.from(selected) });
-      toast({ title: `Deleted ${selected.size} traces`, variant: "success" });
+      toast({ title: `已删除 ${selected.size} 条 Trace`, variant: "success" });
       setSelected(new Set());
       queryClient.invalidateQueries({
         queryKey: queryKeys.traces.all(projectId),
@@ -162,7 +163,7 @@ export default function TracesPage() {
         add_tags: tags,
       });
       toast({
-        title: `Added ${tags.length} tag(s) to ${selected.size} trace(s)`,
+        title: `已为 ${selected.size} 条 Trace 添加 ${tags.length} 个标签`,
         variant: "success",
       });
       setSelected(new Set());
@@ -201,8 +202,8 @@ export default function TracesPage() {
   if (!currentProject) {
     return (
       <EmptyState
-        title="Select a project"
-        description="Choose a project from the sidebar to view traces."
+        title="请选择项目"
+        description="从侧边栏选择一个项目以查看 Trace。"
       />
     );
   }
@@ -212,11 +213,11 @@ export default function TracesPage() {
       {/* Fixed header */}
       <div className="flex-shrink-0 space-y-3 pb-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-mono text-primary">Traces</h1>
+          <h1 className="text-lg font-mono text-primary">Trace</h1>
           <div className="flex items-center gap-2">
             {selected.size > 0 && (
               <span className="text-xs font-mono text-text-dim">
-                {selected.size} selected
+                已选择 {selected.size} 条
               </span>
             )}
             <Button
@@ -226,7 +227,7 @@ export default function TracesPage() {
               disabled={selected.size === 0}
             >
               <FlaskConical className="h-3.5 w-3.5 mr-1.5" />
-              Evaluate
+              评估
             </Button>
             <Button
               variant="secondary"
@@ -235,7 +236,7 @@ export default function TracesPage() {
               disabled={selected.size === 0}
             >
               <Tag className="h-3.5 w-3.5 mr-1.5" />
-              Tag
+              标签
             </Button>
             <Button
               variant="destructive"
@@ -244,7 +245,7 @@ export default function TracesPage() {
               disabled={selected.size === 0}
             >
               <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-              Delete
+              删除
             </Button>
           </div>
         </div>
@@ -254,7 +255,7 @@ export default function TracesPage() {
           <SearchBar
             value={values.name}
             onChange={(v) => set({ name: v, page: "1" })}
-            placeholder="Name"
+            placeholder="名称"
             className="w-30 flex-shrink-0 text-xs"
           />
           <Select
@@ -262,13 +263,13 @@ export default function TracesPage() {
             onValueChange={(v) => set({ status: v, page: "1" })}
           >
             <SelectTrigger className="w-30 h-9 text-xs flex-shrink-0">
-              <SelectValue placeholder="Status" />
+              <SelectValue placeholder="状态" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">全部</SelectItem>
               {Object.values(TraceStatus).map((s) => (
                 <SelectItem key={s} value={s}>
-                  {s}
+                  {labelFor(s)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -278,12 +279,20 @@ export default function TracesPage() {
             onValueChange={(v) => set({ sortBy: v })}
           >
             <SelectTrigger className="w-32 h-9 text-xs flex-shrink-0">
-              <SelectValue placeholder="Sort by" />
+              <SelectValue placeholder="排序方式" />
             </SelectTrigger>
             <SelectContent>
               {Object.values(TraceSortBy).map((s) => (
                 <SelectItem key={s} value={s}>
-                  {s.replace("_", " ")}
+                  {s === "started_at"
+                    ? "开始时间"
+                    : s === "ended_at"
+                      ? "结束时间"
+                      : s === "name"
+                        ? "名称"
+                        : s === "latency"
+                          ? "延迟"
+                          : "状态"}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -296,28 +305,28 @@ export default function TracesPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="asc">Asc</SelectItem>
-              <SelectItem value="desc">Desc</SelectItem>
+              <SelectItem value="asc">升序</SelectItem>
+              <SelectItem value="desc">降序</SelectItem>
             </SelectContent>
           </Select>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <DateTimePicker
               value={values.started_after}
               onChange={(v) => set({ started_after: v, page: "1" })}
-              placeholder="After..."
+              placeholder="开始时间之后"
             />
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <DateTimePicker
               value={values.started_before}
               onChange={(v) => set({ started_before: v, page: "1" })}
-              placeholder="Before..."
+              placeholder="开始时间之前"
             />
           </div>
           <DebouncedInput
             value={values.tags}
             onChange={(v) => set({ tags: v, page: "1" })}
-            placeholder="Tags"
+            placeholder="标签"
             className="w-25"
           />
           <DebouncedInput
@@ -329,7 +338,7 @@ export default function TracesPage() {
           <DebouncedInput
             value={values.user_id}
             onChange={(v) => set({ user_id: v, page: "1" })}
-            placeholder="User ID"
+            placeholder="用户 ID"
             className="w-20"
           />
           {hasActiveFilters && (
@@ -340,7 +349,7 @@ export default function TracesPage() {
               className="text-xs text-warning hover:text-warning gap-1 flex-shrink-0"
             >
               <X className="h-3 w-3" />
-              Clear
+              清除
             </Button>
           )}
         </div>
@@ -357,11 +366,11 @@ export default function TracesPage() {
           />
         ) : !data || data.items.length === 0 ? (
           <EmptyState
-            title="No traces found"
+            title="没有找到 Trace"
             description={
               hasActiveFilters
-                ? "Try adjusting your filters."
-                : "Traces will appear here when your application sends them."
+                ? "请尝试调整筛选条件。"
+                : "应用发送 Trace 后，数据会显示在这里。"
             }
           />
         ) : (
@@ -395,9 +404,9 @@ export default function TracesPage() {
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="Delete traces"
-        description={`Are you sure you want to delete ${selected.size} trace(s)? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title="删除 Trace"
+        description={`确定要删除 ${selected.size} 条 Trace 吗？此操作无法撤销。`}
+        confirmLabel="删除"
         onConfirm={handleBatchDelete}
         destructive
       />
@@ -414,19 +423,19 @@ export default function TracesPage() {
           <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 border border-border bg-surface p-6 animate-fade-in">
             <div className="flex items-start justify-between mb-4">
               <Dialog.Title className="text-sm font-mono text-primary">
-                Add tags to {selected.size} trace(s)
+                为 {selected.size} 条 Trace 添加标签
               </Dialog.Title>
               <Dialog.Close className="text-text-muted hover:text-text transition-colors">
                 <X className="h-4 w-4" />
               </Dialog.Close>
             </div>
             <Dialog.Description className="text-xs text-text-dim mb-4">
-              Enter one or more tags separated by commas.
+              输入一个或多个标签，使用英文逗号分隔。
             </Dialog.Description>
             <Input
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
-              placeholder="e.g. production, v2, reviewed"
+              placeholder="例如：production, v2, reviewed"
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleBatchTag();
               }}
@@ -440,7 +449,7 @@ export default function TracesPage() {
                   setTagInput("");
                 }}
               >
-                Cancel
+                取消
               </Button>
               <Button
                 variant="primary"
@@ -448,7 +457,7 @@ export default function TracesPage() {
                 onClick={handleBatchTag}
                 disabled={tagInput.trim().length === 0}
               >
-                Add Tags
+                添加标签
               </Button>
             </div>
           </Dialog.Content>

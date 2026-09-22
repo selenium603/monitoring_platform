@@ -16,7 +16,7 @@ interface SearchBarProps {
 export function SearchBar({
   value,
   onChange,
-  placeholder = "Search...",
+  placeholder = "搜索…",
   className,
   debounceMs = 500,
 }: SearchBarProps) {

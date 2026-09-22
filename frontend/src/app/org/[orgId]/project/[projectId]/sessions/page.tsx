@@ -55,7 +55,7 @@ export default function SessionsPage() {
   const { values, set, page, limit, offset, setPage, totalPages } =
     useUrlState(URL_CONFIG);
 
-  useDocumentTitle("Sessions");
+  useDocumentTitle("Session 列表");
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { lastVisited, restoredPage, markVisited } = useLastVisitedRow(
@@ -145,8 +145,8 @@ export default function SessionsPage() {
   if (!currentProject) {
     return (
       <EmptyState
-        title="Select a project"
-        description="Choose a project from the sidebar to view sessions."
+        title="请选择项目"
+        description="从侧边栏选择一个项目以查看 Session。"
       />
     );
   }
@@ -155,11 +155,11 @@ export default function SessionsPage() {
     <div className="flex flex-col h-[calc(100vh-96px)] animate-fade-in">
       <div className="flex-shrink-0 space-y-3 pb-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-mono text-primary">Sessions</h1>
+          <h1 className="text-lg font-mono text-primary">Session</h1>
           <div className="flex items-center gap-2">
             {selected.size > 0 && (
               <span className="text-xs font-mono text-text-dim">
-                {selected.size} selected
+                已选择 {selected.size} 条
               </span>
             )}
             <Button
@@ -169,7 +169,7 @@ export default function SessionsPage() {
               disabled={selected.size === 0}
             >
               <FlaskConical className="h-3.5 w-3.5 mr-1.5" />
-              Evaluate
+              评估
             </Button>
           </div>
         </div>
@@ -186,12 +186,12 @@ export default function SessionsPage() {
             onValueChange={(v) => set({ has_error: v, page: "1" })}
           >
             <SelectTrigger className="w-28 h-9 text-xs flex-shrink-0">
-              <SelectValue placeholder="Errors" />
+              <SelectValue placeholder="错误" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="true">Has errors</SelectItem>
-              <SelectItem value="false">No errors</SelectItem>
+              <SelectItem value="all">全部</SelectItem>
+              <SelectItem value="true">有错误</SelectItem>
+              <SelectItem value="false">无错误</SelectItem>
             </SelectContent>
           </Select>
           <Select
@@ -199,12 +199,18 @@ export default function SessionsPage() {
             onValueChange={(v) => set({ sortBy: v })}
           >
             <SelectTrigger className="w-32 h-9 text-xs flex-shrink-0">
-              <SelectValue placeholder="Sort by" />
+              <SelectValue placeholder="排序方式" />
             </SelectTrigger>
             <SelectContent>
               {Object.values(SessionSortBy).map((s) => (
                 <SelectItem key={s} value={s}>
-                  {s.replace("_", " ")}
+                  {s === "recent"
+                    ? "最近活动"
+                    : s === "trace_count"
+                      ? "Trace 数"
+                      : s === "latency"
+                        ? "延迟"
+                        : "成本"}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -217,34 +223,34 @@ export default function SessionsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="asc">Asc</SelectItem>
-              <SelectItem value="desc">Desc</SelectItem>
+              <SelectItem value="asc">升序</SelectItem>
+              <SelectItem value="desc">降序</SelectItem>
             </SelectContent>
           </Select>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <DateTimePicker
               value={values.started_after}
               onChange={(v) => set({ started_after: v, page: "1" })}
-              placeholder="After..."
+              placeholder="开始时间之后"
             />
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <DateTimePicker
               value={values.started_before}
               onChange={(v) => set({ started_before: v, page: "1" })}
-              placeholder="Before..."
+              placeholder="开始时间之前"
             />
           </div>
           <DebouncedInput
             value={values.tags}
             onChange={(v) => set({ tags: v, page: "1" })}
-            placeholder="Tags"
+            placeholder="标签"
             className="w-25"
           />
           <DebouncedInput
             value={values.user_id}
             onChange={(v) => set({ user_id: v, page: "1" })}
-            placeholder="User ID"
+            placeholder="用户 ID"
             className="w-25"
           />
           {hasActiveFilters && (
@@ -255,7 +261,7 @@ export default function SessionsPage() {
               className="text-xs text-warning hover:text-warning gap-1 flex-shrink-0"
             >
               <X className="h-3 w-3" />
-              Clear
+              清除
             </Button>
           )}
         </div>
@@ -271,11 +277,11 @@ export default function SessionsPage() {
           />
         ) : !data || data.items.length === 0 ? (
           <EmptyState
-            title="No sessions found"
+            title="没有找到 Session"
             description={
               hasActiveFilters
-                ? "Try adjusting your filters."
-                : "Sessions are automatically created when traces include a session_id."
+                ? "请尝试调整筛选条件。"
+                : "Trace 包含 session_id 后，系统会自动创建 Session。"
             }
           />
         ) : (

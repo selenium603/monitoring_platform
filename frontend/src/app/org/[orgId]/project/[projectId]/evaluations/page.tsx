@@ -8,38 +8,36 @@ import { useProjectPath } from "@/hooks/useNavigation";
 export default function EvaluationsPage() {
   const basePath = useProjectPath();
 
-  useDocumentTitle("Evaluations");
+  useDocumentTitle("评估");
 
   const sections = [
     {
-      title: "Trace Evaluation Runs",
-      description: "Run evaluation metrics against individual traces",
+      title: "Trace 评估运行",
+      description: "针对单条 Trace 执行评估指标",
       href: basePath + "/evaluations/trace-runs",
       icon: <ListTree className="h-5 w-5" />,
     },
     {
-      title: "Session Evaluation Runs",
-      description: "Run evaluation metrics against entire sessions",
+      title: "Session 评估运行",
+      description: "针对整个 Session 执行评估指标",
       href: basePath + "/evaluations/session-runs",
       icon: <Layers className="h-5 w-5" />,
     },
     {
-      title: "Monitors",
-      description: "Automated evaluation schedules that run periodically",
+      title: "评估监控",
+      description: "按周期自动执行评估",
       href: basePath + "/evaluations/monitors",
       icon: <Radio className="h-5 w-5" />,
     },
     {
-      title: "Trace Scores",
-      description:
-        "Browse and filter every score produced for traces across runs, metrics, and environments",
+      title: "Trace 分数",
+      description: "浏览并筛选不同运行、指标和环境产生的 Trace 分数",
       href: basePath + "/evaluations/trace-scores",
       icon: <Gauge className="h-5 w-5" />,
     },
     {
-      title: "Session Scores",
-      description:
-        "Browse and filter every score produced for sessions across runs and metrics",
+      title: "Session 分数",
+      description: "浏览并筛选不同运行和指标产生的 Session 分数",
       href: basePath + "/evaluations/session-scores",
       icon: <Gauge className="h-5 w-5" />,
     },
@@ -47,7 +45,7 @@ export default function EvaluationsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <h1 className="text-lg font-mono text-primary">Evaluations</h1>
+      <h1 className="text-lg font-mono text-primary">评估</h1>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {sections.map((s) => (
           <Link

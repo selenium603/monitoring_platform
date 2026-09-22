@@ -94,26 +94,26 @@ export function SessionTable({
               Session ID
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Traces
+              Trace 数
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Error
+              错误
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Latency
+              延迟
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Tokens
+              Token
             </th>
             {/* TODO(cost): Restore Cost column once session cost computation is implemented. */}
             {/* <th className="text-left px-3 py-2 text-text-muted font-normal">
               Cost
             </th> */}
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              First Trace
+              首个 Trace
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Tags
+              标签
             </th>
           </tr>
         </thead>
@@ -150,9 +150,9 @@ export function SessionTable({
               <td className="px-3 py-2 text-text-dim">{session.trace_count}</td>
               <td className="px-3 py-2">
                 {session.has_error ? (
-                  <Badge variant="error">Error</Badge>
+                  <Badge variant="error">错误</Badge>
                 ) : (
-                  <Badge variant="success">OK</Badge>
+                  <Badge variant="success">正常</Badge>
                 )}
               </td>
               <td className="px-3 py-2 text-text-dim">

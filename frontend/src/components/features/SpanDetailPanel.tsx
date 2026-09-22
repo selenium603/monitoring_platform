@@ -28,7 +28,7 @@ export function SpanDetailPanel({ trace, span, mode }: SpanDetailPanelProps) {
   if (!span) {
     return (
       <div className="flex items-center justify-center h-full text-xs text-text-muted font-mono">
-        Select a span to view details
+        选择一个 Span 查看详情
       </div>
     );
   }
@@ -44,21 +44,21 @@ function TraceDetail({ trace }: { trace: TraceResponse }) {
           {trace.name}
         </h3>
         <span className="text-[10px] font-mono text-text-muted">
-          Trace overview
+          Trace 概览
         </span>
       </div>
 
-      <DetailSection title="Summary">
+      <DetailSection title="摘要">
         <div className="grid grid-cols-3 gap-x-6 gap-y-2">
-          <KV label="Total tokens" value={formatTokens(trace.total_tokens)} />
+          <KV label="Token 总量" value={formatTokens(trace.total_tokens)} />
           {/* TODO(cost): Restore Total cost once trace cost computation is implemented. */}
           {/* <KV label="Total cost" value={formatCost(trace.total_cost)} /> */}
-          <KV label="Spans" value={String(trace.spans.length)} />
+          <KV label="Span 数量" value={String(trace.spans.length)} />
         </div>
       </DetailSection>
 
       {trace.input != null && (
-        <DetailSection title="Input">
+        <DetailSection title="输入">
           <div className="pl-1">
             <JsonViewer data={trace.input} />
           </div>
@@ -66,7 +66,7 @@ function TraceDetail({ trace }: { trace: TraceResponse }) {
       )}
 
       {trace.output != null && (
-        <DetailSection title="Output">
+        <DetailSection title="输出">
           <div className="pl-1">
             <JsonViewer data={trace.output} />
           </div>
@@ -74,7 +74,7 @@ function TraceDetail({ trace }: { trace: TraceResponse }) {
       )}
 
       {Object.keys(trace.metadata).length > 0 && (
-        <DetailSection title="Metadata">
+        <DetailSection title="元数据">
           <div className="pl-1">
             <JsonViewer data={trace.metadata} />
           </div>
@@ -107,22 +107,22 @@ function SpanDetail({ span }: { span: SpanResponse }) {
       </div>
 
       {/* Info grid */}
-      <DetailSection title="Info">
+      <DetailSection title="信息">
         <div className="grid grid-cols-2 gap-x-6 gap-y-2">
           <KV label="Span ID" value={span.span_id} copyable />
           {span.parent_span_id && (
-            <KV label="Parent span" value={span.parent_span_id} copyable />
+            <KV label="父 Span" value={span.parent_span_id} copyable />
           )}
-          <KV label="Latency" value={formatDuration(span.latency_ms)} />
+          <KV label="延迟" value={formatDuration(span.latency_ms)} />
           <KV
-            label="Time to first token"
+            label="首 Token 延迟"
             value={formatDuration(span.time_to_first_token_ms)}
           />
-          <KV label="Started" value={formatDateTime(span.started_at)} />
-          <KV label="Ended" value={formatDateTime(span.ended_at)} />
+          <KV label="开始时间" value={formatDateTime(span.started_at)} />
+          <KV label="结束时间" value={formatDateTime(span.ended_at)} />
           {span.completion_start_time && (
             <KV
-              label="Completion start"
+              label="生成开始"
               value={formatDateTime(span.completion_start_time)}
             />
           )}
@@ -132,7 +132,7 @@ function SpanDetail({ span }: { span: SpanResponse }) {
       {/* Error */}
       {span.error && (
         <DetailSection
-          title="Error"
+          title="错误"
           titleClassName="text-error"
           icon={<AlertTriangle className="h-3 w-3 text-error" />}
         >
@@ -144,7 +144,7 @@ function SpanDetail({ span }: { span: SpanResponse }) {
 
       {/* Input */}
       {span.input != null && (
-        <DetailSection title="Input">
+        <DetailSection title="输入">
           <div className="pl-1">
             <JsonViewer data={span.input} />
           </div>
@@ -153,7 +153,7 @@ function SpanDetail({ span }: { span: SpanResponse }) {
 
       {/* Output */}
       {span.output != null && (
-        <DetailSection title="Output">
+        <DetailSection title="输出">
           <div className="pl-1">
             <JsonViewer data={span.output} />
           </div>
@@ -162,7 +162,7 @@ function SpanDetail({ span }: { span: SpanResponse }) {
 
       {/* Token Usage */}
       {hasTokens && (
-        <DetailSection title="Token Usage">
+        <DetailSection title="Token 用量">
           <div className="grid grid-cols-2 gap-x-6 gap-y-2">
             {Object.entries(span.token_usage!).map(([k, v]) => (
               <KV key={k} label={k} value={String(v ?? "—")} />
@@ -173,7 +173,7 @@ function SpanDetail({ span }: { span: SpanResponse }) {
 
       {/* Cost */}
       {hasCost && (
-        <DetailSection title="Cost">
+        <DetailSection title="成本">
           <div className="grid grid-cols-2 gap-x-6 gap-y-2">
             {Object.entries(span.cost!).map(([k, v]) => (
               <KV key={k} label={k} value={formatCost(v)} />
@@ -184,7 +184,7 @@ function SpanDetail({ span }: { span: SpanResponse }) {
 
       {/* Model Parameters */}
       {hasModelParams && (
-        <DetailSection title="Model Parameters">
+        <DetailSection title="模型参数">
           <div className="pl-1">
             <JsonViewer data={span.model_parameters} />
           </div>
@@ -193,7 +193,7 @@ function SpanDetail({ span }: { span: SpanResponse }) {
 
       {/* Metadata */}
       {hasMetadata && (
-        <DetailSection title="Metadata">
+        <DetailSection title="元数据">
           <div className="pl-1">
             <JsonViewer data={span.metadata} />
           </div>

@@ -4,6 +4,7 @@ import type { EvalRunResponse } from "@/lib/api/types";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Badge } from "@/components/ui/Badge";
 import { formatRelativeTime } from "@/lib/utils/format";
+import { labelFor, metricLabel } from "@/lib/utils/labels";
 
 interface EvalRunTableProps {
   runs: EvalRunResponse[];
@@ -17,31 +18,31 @@ export function EvalRunTable({ runs, onSelect }: EvalRunTableProps) {
         <thead className="sticky top-0 z-10 bg-surface-hi">
           <tr className="border-b border-border">
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Name / ID
+              名称 / ID
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Status
+              状态
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Metrics
+              指标
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Progress
+              进度
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Target
+              目标
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Sampling
+              采样比例
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Model
+              模型
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Created
+              创建时间
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Completed
+              完成时间
             </th>
           </tr>
         </thead>
@@ -56,7 +57,7 @@ export function EvalRunTable({ runs, onSelect }: EvalRunTableProps) {
                 {run.name || run.id.slice(0, 8)}
                 {run.monitor_id && (
                   <span className="ml-2 text-[10px] text-text-muted">
-                    · monitor
+                    · 监控
                   </span>
                 )}
               </td>
@@ -67,7 +68,7 @@ export function EvalRunTable({ runs, onSelect }: EvalRunTableProps) {
                 <div className="flex gap-1 flex-wrap">
                   {run.metric_names.slice(0, 3).map((m) => (
                     <Badge key={m} variant="info">
-                      {m}
+                      {metricLabel(m)}
                     </Badge>
                   ))}
                   {run.metric_names.length > 3 && (
@@ -81,16 +82,18 @@ export function EvalRunTable({ runs, onSelect }: EvalRunTableProps) {
                 {run.evaluated_count}/{run.total_targets}
                 {run.failed_count > 0 && (
                   <span className="text-error ml-1">
-                    ({run.failed_count} failed)
+                    （{run.failed_count} 个失败）
                   </span>
                 )}
               </td>
-              <td className="px-3 py-2 text-text-dim">{run.target_type}</td>
+              <td className="px-3 py-2 text-text-dim">
+                {labelFor(run.target_type)}
+              </td>
               <td className="px-3 py-2 text-text-dim">
                 {formatSamplingRate(run.sampling_rate)}
               </td>
               <td className="px-3 py-2 text-text-dim max-w-[160px] truncate">
-                {run.model ?? <span className="text-text-muted">default</span>}
+                {run.model ?? <span className="text-text-muted">默认</span>}
               </td>
               <td className="px-3 py-2 text-text-dim">
                 {formatRelativeTime(run.created_at)}

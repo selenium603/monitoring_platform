@@ -30,6 +30,7 @@ import { queryKeys } from "@/lib/query/keys";
 import { EvaluationStatus } from "@/lib/api/enums";
 import { extractErrorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/utils/cn";
+import { labelFor } from "@/lib/utils/labels";
 
 const LIST_POLL_INTERVAL_MS = 5000;
 const STATUS_ALL = "all";
@@ -48,7 +49,7 @@ export default function SessionRunsPage() {
   const { values, set, page, limit, offset, setPage, totalPages } =
     useUrlState(URL_CONFIG);
 
-  useDocumentTitle("Session Runs");
+  useDocumentTitle("Session 评估运行");
 
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -90,8 +91,8 @@ export default function SessionRunsPage() {
   if (!currentProject) {
     return (
       <EmptyState
-        title="Select a project"
-        description="Choose a project to view session evaluation runs."
+        title="请选择项目"
+        description="选择一个项目以查看 Session 评估运行。"
       />
     );
   }
@@ -100,16 +101,14 @@ export default function SessionRunsPage() {
     <div className="flex flex-col h-[calc(100vh-96px)] animate-fade-in">
       <div className="flex-shrink-0 space-y-3 pb-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-mono text-primary">
-            Session Evaluation Runs
-          </h1>
+          <h1 className="text-lg font-mono text-primary">Session 评估运行</h1>
           <Button
             variant="primary"
             size="sm"
             onClick={() => setCreateOpen(true)}
           >
             <FlaskConical className="h-3.5 w-3.5 mr-1.5" />
-            Create Evaluation
+            创建评估
           </Button>
         </div>
 
@@ -119,13 +118,13 @@ export default function SessionRunsPage() {
             onValueChange={(v) => set({ status: v, page: "1" })}
           >
             <SelectTrigger className="w-36 h-9 text-xs flex-shrink-0">
-              <SelectValue placeholder="Status" />
+              <SelectValue placeholder="状态" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={STATUS_ALL}>All statuses</SelectItem>
+              <SelectItem value={STATUS_ALL}>全部状态</SelectItem>
               {Object.values(EvaluationStatus).map((s) => (
                 <SelectItem key={s} value={s}>
-                  {s}
+                  {labelFor(s)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -138,7 +137,7 @@ export default function SessionRunsPage() {
               className="text-xs text-warning hover:text-warning gap-1 flex-shrink-0"
             >
               <X className="h-3 w-3" />
-              Clear
+              清除
             </Button>
           )}
         </div>
@@ -154,11 +153,11 @@ export default function SessionRunsPage() {
           />
         ) : !data || data.items.length === 0 ? (
           <EmptyState
-            title="No session evaluation runs"
+            title="暂无 Session 评估运行"
             description={
               hasActiveFilters
-                ? "Try adjusting your filters."
-                : "Create an evaluation run to get started."
+                ? "请尝试调整筛选条件。"
+                : "创建一次评估运行即可开始。"
             }
           />
         ) : (

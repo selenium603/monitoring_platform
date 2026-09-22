@@ -42,6 +42,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useEvalRunTracker } from "@/components/providers/EvalRunTrackerProvider";
 import { extractErrorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/utils/cn";
+import { metricLabel } from "@/lib/utils/labels";
 
 const DEFAULT_MODEL_VALUE = "__default__";
 
@@ -165,7 +166,7 @@ export function EvaluationSidebar({
         mode,
         targetIds: [...targetIds],
       });
-      toast({ title: "Evaluation run queued", variant: "success" });
+      toast({ title: "评估运行已排队", variant: "success" });
       onSubmitted?.();
       onClearSelection?.();
       onClose();
@@ -190,7 +191,7 @@ export function EvaluationSidebar({
       >
         <div className="flex items-center justify-between h-12 px-4 border-b border-border flex-shrink-0">
           <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider">
-            {mode} evaluation · {targetIds.length}
+            {mode === "trace" ? "Trace" : "Session"} 评估 · {targetIds.length}
           </h2>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-3.5 w-3.5" />
@@ -209,13 +210,13 @@ export function EvaluationSidebar({
               ) : (
                 <ChevronRight className="h-2.5 w-2.5" />
               )}
-              Target {mode}s · {targetIds.length}
+              评估目标 · {targetIds.length}
             </button>
             {idsExpanded && (
               <div className="mt-2 max-h-32 overflow-y-auto border border-border/40 bg-bg p-2">
                 {targetIds.length === 0 ? (
                   <p className="text-[11px] font-mono text-text-muted">
-                    No targets selected
+                    尚未选择评估目标
                   </p>
                 ) : (
                   <ul className="space-y-0.5">
@@ -235,12 +236,12 @@ export function EvaluationSidebar({
 
           <div className="px-4 py-3 border-b border-border">
             <label className="block text-xs font-mono text-text-primary uppercase tracking-wide mb-1.5">
-              Name <span className="text-error">*</span>
+              名称 <span className="text-error">*</span>
             </label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Eval run name"
+              placeholder="评估运行名称"
               className="h-8 text-xs"
               disabled={submitting}
             />
@@ -249,7 +250,7 @@ export function EvaluationSidebar({
           <div className="px-4 py-3 border-b border-border">
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-mono text-text-primary uppercase tracking-wide">
-                Metrics <span className="text-error">*</span>
+                指标 <span className="text-error">*</span>
               </label>
               <span className="text-[10px] font-mono text-text-muted">
                 {selectedMetrics.size}/{metrics.length}
@@ -257,7 +258,7 @@ export function EvaluationSidebar({
             </div>
             {metricsQuery.isPending ? (
               <p className="text-[11px] font-mono text-text-muted py-2">
-                Loading metrics…
+                正在加载指标…
               </p>
             ) : metricsQuery.error ? (
               <p className="text-[11px] font-mono text-error py-2">
@@ -265,7 +266,7 @@ export function EvaluationSidebar({
               </p>
             ) : metrics.length === 0 ? (
               <p className="text-[11px] font-mono text-text-muted py-2">
-                No metrics available
+                暂无可用指标
               </p>
             ) : (
               <div className="max-h-64 overflow-y-auto border border-border/40 divide-y divide-border/40">
@@ -288,7 +289,7 @@ export function EvaluationSidebar({
                       />
                       <div className="flex-1 min-w-0">
                         <span className="text-xs font-mono text-text truncate block">
-                          {metric.name}
+                          {metricLabel(metric.name)}
                         </span>
                         {metric.description && (
                           <p className="mt-0.5 text-[11px] font-mono text-text-muted line-clamp-2">
@@ -305,7 +306,7 @@ export function EvaluationSidebar({
 
           <div className="px-4 py-3 border-b border-border">
             <label className="block text-xs font-mono text-text-primary uppercase tracking-wide mb-1.5">
-              Model
+              模型
             </label>
             <Select
               value={selectedModel}
@@ -313,10 +314,10 @@ export function EvaluationSidebar({
               disabled={submitting || providersQuery.isPending}
             >
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Default" />
+                <SelectValue placeholder="默认" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={DEFAULT_MODEL_VALUE}>Default</SelectItem>
+                <SelectItem value={DEFAULT_MODEL_VALUE}>默认</SelectItem>
                 {providers.map((p) => (
                   <SelectGroup key={p.key}>
                     <SelectLabel>{p.name}</SelectLabel>
@@ -350,7 +351,7 @@ export function EvaluationSidebar({
                   disabled={submitting}
                 />
                 <span className="text-xs font-mono text-text-primary uppercase tracking-wide">
-                  Customize signal weights
+                  自定义信号权重
                 </span>
               </label>
               {customizeWeights && (
@@ -395,7 +396,7 @@ export function EvaluationSidebar({
             onClick={onClose}
             disabled={submitting}
           >
-            Cancel
+            取消
           </Button>
           <Button
             variant="primary"
@@ -408,7 +409,7 @@ export function EvaluationSidebar({
             ) : (
               <FlaskConical className="h-3 w-3" />
             )}
-            {submitting ? "Submitting…" : "Submit"}
+            {submitting ? "提交中…" : "提交"}
           </Button>
         </div>
       </div>

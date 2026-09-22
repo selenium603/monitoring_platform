@@ -38,6 +38,7 @@ import {
 } from "@/lib/api/evaluations";
 import { extractErrorMessage } from "@/lib/api/client";
 import { useToast } from "@/components/providers/ToastProvider";
+import { dataTypeLabel, metricLabel, sourceLabel } from "@/lib/utils/labels";
 
 export type ScoreItem = TraceScoreResponse | SessionScoreResponse;
 
@@ -82,7 +83,7 @@ export function ScoreRow({
       } else {
         await deleteSessionScore(score.id);
       }
-      toast({ title: "Score deleted", variant: "success" });
+      toast({ title: "分数已删除", variant: "success" });
       onScoreDeleted?.();
     } catch (err) {
       toast({ title: extractErrorMessage(err), variant: "error" });
@@ -106,7 +107,9 @@ export function ScoreRow({
     <div className="px-4 py-3 hover:bg-surface-hi transition-colors">
       <div className="flex items-center justify-between mb-2 gap-2">
         <span className="text-xs font-mono text-text min-w-0 truncate">
-          <span className="text-warning font-medium">{score.name}</span>
+          <span className="text-warning font-medium">
+            {metricLabel(score.name)}
+          </span>
           <span className="text-warning mx-1.5">=</span>
           <span className="text-warning font-semibold">
             {score.value ?? "—"}
@@ -119,10 +122,10 @@ export function ScoreRow({
               size="sm"
               className="h-7 px-2 gap-1 text-text-muted hover:text-text"
               onClick={() => setEditing(true)}
-              aria-label="Annotate score"
+              aria-label="标注分数"
             >
               <SquarePen className="h-3 w-3" />
-              annotate
+              标注
             </Button>
           )}
           <Button
@@ -130,17 +133,17 @@ export function ScoreRow({
             size="sm"
             className="h-7 px-2 gap-1 text-text-muted hover:text-error"
             onClick={() => setConfirmDelete(true)}
-            aria-label="Delete score"
+            aria-label="删除分数"
           >
             <Trash2 className="h-3 w-3" />
-            delete
+            删除
           </Button>
         </div>
       </div>
 
       <div className="flex items-center gap-1.5 mb-2">
-        <Badge variant="default">{score.data_type}</Badge>
-        <Badge variant="info">{score.source}</Badge>
+        <Badge variant="default">{dataTypeLabel(score.data_type)}</Badge>
+        <Badge variant="info">{sourceLabel(score.source)}</Badge>
         <StatusBadge status={score.status} />
       </div>
 
@@ -148,7 +151,7 @@ export function ScoreRow({
         <div className="flex items-start gap-1 mb-2">
           <MessageSquareText className="h-3 w-3 text-text-muted mt-0.5 flex-shrink-0" />
           <p className="text-xs font-mono text-text-dim whitespace-pre-wrap">
-            <span className="text-text-muted">Reasoning:</span> {score.reason}
+            <span className="text-text-muted">评估理由：</span> {score.reason}
           </p>
         </div>
       )}
@@ -156,7 +159,7 @@ export function ScoreRow({
       <div className="flex items-center gap-1.5 mb-2 min-w-0">
         <TargetIcon className="h-3 w-3 text-text-muted flex-shrink-0" />
         <span className="text-xs font-mono text-text-muted flex-shrink-0">
-          {traceScore ? "Trace ID:" : "Session ID:"}
+          {traceScore ? "Trace ID：" : "Session ID："}
         </span>
         <span
           className="text-xs font-mono text-text-dim truncate min-w-0"
@@ -164,11 +167,17 @@ export function ScoreRow({
         >
           {targetId}
         </span>
-        <Tooltip content={copiedTarget ? "Copied!" : `Copy ${targetKind} ID`}>
+        <Tooltip
+          content={
+            copiedTarget
+              ? "已复制"
+              : `复制${targetKind === "trace" ? "Trace" : "Session"} ID`
+          }
+        >
           <button
             className="text-text-muted hover:text-text transition-colors flex-shrink-0"
             onClick={handleCopyTarget}
-            aria-label={`Copy ${targetKind} ID`}
+            aria-label={`复制${targetKind === "trace" ? "Trace" : "Session"} ID`}
           >
             {copiedTarget ? (
               <Check className="h-3 w-3 text-success" />
@@ -187,33 +196,33 @@ export function ScoreRow({
         {traceScore?.environment && (
           <div className="flex items-center gap-1.5">
             <Globe className="h-2.5 w-2.5" />
-            <span>Environment: {traceScore.environment}</span>
+            <span>环境：{traceScore.environment}</span>
           </div>
         )}
         {traceScore?.config_id && (
           <div className="flex items-center gap-1.5">
             <Settings className="h-2.5 w-2.5" />
-            <span className="truncate">Config: {traceScore.config_id}</span>
+            <span className="truncate">配置：{traceScore.config_id}</span>
           </div>
         )}
         {score.author_user_id && (
           <div className="flex items-center gap-1.5">
             <User className="h-2.5 w-2.5" />
-            <span className="truncate">Author: {score.author_user_id}</span>
+            <span className="truncate">作者：{score.author_user_id}</span>
           </div>
         )}
         <div className="flex items-center gap-1.5">
           <Clock className="h-2.5 w-2.5" />
-          <span>Created {formatDateTime(score.created_at)}</span>
+          <span>创建于 {formatDateTime(score.created_at)}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <RefreshCw className="h-2.5 w-2.5" />
-          <span>Updated {formatDateTime(score.updated_at)}</span>
+          <span>更新于 {formatDateTime(score.updated_at)}</span>
         </div>
         {score.eval_run_id && (
           <div className="flex items-center gap-1.5">
             <FlaskConical className="h-2.5 w-2.5" />
-            <span className="truncate">Eval run: {score.eval_run_id}</span>
+            <span className="truncate">评估运行：{score.eval_run_id}</span>
           </div>
         )}
       </div>
@@ -221,9 +230,9 @@ export function ScoreRow({
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="Delete score"
-        description={`Delete score "${score.name}"? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title="删除分数"
+        description={`确定要删除分数“${score.name}”吗？此操作无法撤销。`}
+        confirmLabel="删除"
         onConfirm={handleDelete}
         destructive
       />
@@ -258,11 +267,11 @@ function EditableTraceScoreRow({
         typeof parsed !== "object" ||
         Array.isArray(parsed)
       ) {
-        return "Metadata must be a JSON object";
+        return "元数据必须是 JSON 对象";
       }
       return null;
     } catch (e) {
-      return e instanceof Error ? e.message : "Invalid JSON";
+      return e instanceof Error ? e.message : "JSON 格式无效";
     }
   }, [metadataText]);
 
@@ -273,7 +282,7 @@ function EditableTraceScoreRow({
       try {
         parsedMetadata = JSON.parse(trimmed) as Record<string, unknown>;
       } catch {
-        toast({ title: "Invalid metadata JSON", variant: "error" });
+        toast({ title: "元数据 JSON 格式无效", variant: "error" });
         return;
       }
     } else {
@@ -287,7 +296,7 @@ function EditableTraceScoreRow({
         reason: reason.trim() === "" ? null : reason,
         metadata: parsedMetadata,
       });
-      toast({ title: "Score updated", variant: "success" });
+      toast({ title: "分数已更新", variant: "success" });
       onSaved();
     } catch (err) {
       toast({ title: extractErrorMessage(err), variant: "error" });
@@ -301,13 +310,13 @@ function EditableTraceScoreRow({
       <div className="flex items-center justify-between mb-2 gap-2">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-xs font-mono text-warning font-medium whitespace-nowrap">
-            {score.name}
+            {metricLabel(score.name)}
           </span>
           <span className="text-text-muted text-xs font-mono">=</span>
           <Input
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder="value"
+            placeholder="数值"
             className="h-7 text-xs px-2 flex-1 min-w-0"
             disabled={saving}
           />
@@ -318,42 +327,42 @@ function EditableTraceScoreRow({
             size="sm"
             onClick={handleSave}
             disabled={saving || metadataError !== null}
-            aria-label="Save score"
+            aria-label="保存分数"
           >
             {saving ? (
               <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
               <Save className="h-3 w-3" />
             )}
-            {saving ? "Saving…" : "Save"}
+            {saving ? "保存中…" : "保存"}
           </Button>
           <Button
             variant="secondary"
             size="sm"
             onClick={onCancel}
             disabled={saving}
-            aria-label="Cancel edit"
+            aria-label="取消编辑"
           >
             <XCircle className="h-3 w-3" />
-            Cancel
+            取消
           </Button>
         </div>
       </div>
 
       <div className="flex items-center gap-1.5 mb-2">
-        <Badge variant="default">{score.data_type}</Badge>
-        <Badge variant="info">{score.source}</Badge>
+        <Badge variant="default">{dataTypeLabel(score.data_type)}</Badge>
+        <Badge variant="info">{sourceLabel(score.source)}</Badge>
         <StatusBadge status={score.status} />
       </div>
 
       <div className="mb-2">
         <label className="block text-[10px] font-mono text-text-muted uppercase tracking-wide mb-1">
-          Reason
+          原因
         </label>
         <Textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Reasoning for this score"
+          placeholder="填写此分数的原因"
           className="min-h-[60px] text-xs"
           disabled={saving}
         />
@@ -361,7 +370,7 @@ function EditableTraceScoreRow({
 
       <div className="mb-2">
         <label className="block text-[10px] font-mono text-text-muted uppercase tracking-wide mb-1">
-          Metadata (JSON)
+          元数据（JSON）
         </label>
         <Textarea
           value={metadataText}
@@ -386,33 +395,33 @@ function EditableTraceScoreRow({
         {score.environment && (
           <div className="flex items-center gap-1.5">
             <Globe className="h-2.5 w-2.5" />
-            <span>Environment: {score.environment}</span>
+            <span>环境：{score.environment}</span>
           </div>
         )}
         {score.config_id && (
           <div className="flex items-center gap-1.5">
             <Settings className="h-2.5 w-2.5" />
-            <span className="truncate">Config: {score.config_id}</span>
+            <span className="truncate">配置：{score.config_id}</span>
           </div>
         )}
         {score.author_user_id && (
           <div className="flex items-center gap-1.5">
             <User className="h-2.5 w-2.5" />
-            <span className="truncate">Author: {score.author_user_id}</span>
+            <span className="truncate">作者：{score.author_user_id}</span>
           </div>
         )}
         <div className="flex items-center gap-1.5">
           <Clock className="h-2.5 w-2.5" />
-          <span>Created {formatDateTime(score.created_at)}</span>
+          <span>创建于 {formatDateTime(score.created_at)}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <RefreshCw className="h-2.5 w-2.5" />
-          <span>Updated {formatDateTime(score.updated_at)}</span>
+          <span>更新于 {formatDateTime(score.updated_at)}</span>
         </div>
         {score.eval_run_id && (
           <div className="flex items-center gap-1.5">
             <FlaskConical className="h-2.5 w-2.5" />
-            <span className="truncate">Eval run: {score.eval_run_id}</span>
+            <span className="truncate">评估运行：{score.eval_run_id}</span>
           </div>
         )}
       </div>
@@ -436,7 +445,7 @@ export function MetadataSection({ data }: { data: Record<string, unknown> }) {
         ) : (
           <ChevronRight className="h-2.5 w-2.5" />
         )}
-        Metadata
+        元数据
       </button>
       {expanded && (
         <div className="border border-border bg-bg p-2 overflow-x-auto">

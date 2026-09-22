@@ -25,12 +25,12 @@ export function Pagination({
   return (
     <div className="flex items-center justify-between pt-3 flex-shrink-0">
       <span className="text-xs text-text-muted font-mono">
-        {total != null ? `${total} total` : ""}
+        {total != null ? `共 ${total} 条` : ""}
       </span>
       <div className="flex items-center gap-3">
         {limit != null && onLimitChange && (
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-text-muted font-mono">Rows</span>
+            <span className="text-[10px] text-text-muted font-mono">每页</span>
             <div className="flex items-center gap-0.5">
               {LIMIT_OPTIONS.map((opt) => (
                 <button

@@ -44,6 +44,12 @@ import { useEvalRunTracker } from "@/components/providers/EvalRunTrackerProvider
 import { extractErrorMessage } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
 import { EvalRunDetailSidebar } from "./EvalRunDetailSidebar";
+import {
+  cadenceLabel,
+  filterLabel,
+  labelFor,
+  metricLabel,
+} from "@/lib/utils/labels";
 
 /** Poll detail page only when the next firing time is near (~2 minutes). */
 const IMMINENT_WINDOW_MS = 2 * 60 * 1000;
@@ -150,7 +156,7 @@ export function MonitorDetailSidebar({
     setActionPending("pause");
     try {
       await pauseMonitor(monitor.id);
-      toast({ title: "Monitor paused", variant: "success" });
+      toast({ title: "监控已暂停", variant: "success" });
       await notifyChanged();
     } catch (err) {
       toast({ title: extractErrorMessage(err), variant: "error" });
@@ -164,7 +170,7 @@ export function MonitorDetailSidebar({
     setActionPending("resume");
     try {
       await resumeMonitor(monitor.id);
-      toast({ title: "Monitor resumed", variant: "success" });
+      toast({ title: "监控已恢复", variant: "success" });
       await notifyChanged();
     } catch (err) {
       toast({ title: extractErrorMessage(err), variant: "error" });
@@ -184,8 +190,8 @@ export function MonitorDetailSidebar({
         targetIds: [],
       });
       toast({
-        title: "Run queued",
-        description: "A new run has been kicked off for this monitor.",
+        title: "运行已排队",
+        description: "已为此监控启动新一轮评估。",
         variant: "success",
       });
       await Promise.all([
@@ -211,7 +217,7 @@ export function MonitorDetailSidebar({
     setActionPending("delete");
     try {
       await deleteMonitor(monitor.id);
-      toast({ title: "Monitor deleted", variant: "success" });
+      toast({ title: "监控已删除", variant: "success" });
       await notifyChanged();
       onClose();
     } catch (err) {
@@ -223,8 +229,7 @@ export function MonitorDetailSidebar({
   }
 
   const title =
-    monitor?.name ||
-    (monitor ? `Monitor ${monitor.id.slice(0, 8)}` : "Monitor");
+    monitor?.name || (monitor ? `监控 ${monitor.id.slice(0, 8)}` : "监控");
   const isRefreshing = monitorQuery.isFetching;
   const isActive = monitor?.status === MonitorStatus.ACTIVE;
   const targetMode: "trace" | "session" =
@@ -256,8 +261,8 @@ export function MonitorDetailSidebar({
               size="icon"
               onClick={() => monitorQuery.refetch()}
               disabled={!monitorId || isRefreshing}
-              aria-label="Refresh"
-              title="Refresh"
+              aria-label="刷新"
+              title="刷新"
             >
               <RefreshCw
                 className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
@@ -272,7 +277,7 @@ export function MonitorDetailSidebar({
         <div className="flex-1 min-h-0 overflow-y-auto">
           {!monitorId ? null : monitorQuery.isPending && !monitor ? (
             <div className="flex items-center justify-center h-24 text-xs text-text-muted font-mono">
-              Loading monitor…
+              正在加载监控…
             </div>
           ) : monitorQuery.error ? (
             <div className="p-4 text-xs font-mono text-error">
@@ -283,32 +288,34 @@ export function MonitorDetailSidebar({
               <div className="px-4 py-3 border-b border-border space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <StatusBadge status={monitor.status} />
-                  <Badge variant="default">{monitor.target_type}</Badge>
+                  <Badge variant="default">
+                    {labelFor(monitor.target_type)}
+                  </Badge>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                  <KVRow label="Cadence">
+                  <KVRow label="运行周期">
                     <span className="text-text truncate">
-                      {formatCadence(monitor.cadence)}
+                      {cadenceLabel(monitor.cadence)}
                     </span>
                   </KVRow>
-                  <KVRow label="Sampling">
+                  <KVRow label="采样比例">
                     <span className="text-text">
                       {formatSamplingRate(monitor.sampling_rate)}
                     </span>
                   </KVRow>
-                  <KVRow label="Model">
+                  <KVRow label="模型">
                     <span className="text-text truncate">
                       {monitor.model ?? (
-                        <span className="text-text-muted">default</span>
+                        <span className="text-text-muted">默认</span>
                       )}
                     </span>
                   </KVRow>
-                  <KVRow label="Only if changed">
+                  <KVRow label="仅在有变化时运行">
                     <span className="text-text">
-                      {monitor.only_if_changed ? "Yes" : "No"}
+                      {monitor.only_if_changed ? "是" : "否"}
                     </span>
                   </KVRow>
-                  <KVRow label="Last run">
+                  <KVRow label="上次运行">
                     <span className="text-text flex items-center gap-1">
                       <Clock className="h-2.5 w-2.5" />
                       {monitor.last_run_at ? (
@@ -318,7 +325,7 @@ export function MonitorDetailSidebar({
                       )}
                     </span>
                   </KVRow>
-                  <KVRow label="Next run">
+                  <KVRow label="下次运行">
                     <span className="text-text flex items-center gap-1">
                       <Clock className="h-2.5 w-2.5" />
                       {monitor.next_run_at ? (
@@ -328,19 +335,19 @@ export function MonitorDetailSidebar({
                       )}
                     </span>
                   </KVRow>
-                  <KVRow label="Created">
+                  <KVRow label="创建时间">
                     <span className="text-text flex items-center gap-1">
                       <Clock className="h-2.5 w-2.5" />
                       {formatDateTime(monitor.created_at)}
                     </span>
                   </KVRow>
-                  <KVRow label="Updated">
+                  <KVRow label="更新时间">
                     <span className="text-text flex items-center gap-1">
                       <Clock className="h-2.5 w-2.5" />
                       {formatDateTime(monitor.updated_at)}
                     </span>
                   </KVRow>
-                  <KVRow label="Monitor ID" truncate={false}>
+                  <KVRow label="监控 ID" truncate={false}>
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span
                         className="text-text-dim truncate min-w-0"
@@ -348,13 +355,11 @@ export function MonitorDetailSidebar({
                       >
                         {monitor.id}
                       </span>
-                      <Tooltip
-                        content={copiedId ? "Copied!" : "Copy monitor ID"}
-                      >
+                      <Tooltip content={copiedId ? "已复制！" : "复制监控 ID"}>
                         <button
                           className="text-text-muted hover:text-text transition-colors flex-shrink-0"
                           onClick={handleCopyId}
-                          aria-label="Copy monitor ID"
+                          aria-label="复制监控 ID"
                         >
                           {copiedId ? (
                             <Check className="h-3 w-3 text-success" />
@@ -370,17 +375,17 @@ export function MonitorDetailSidebar({
 
               <div className="px-4 py-3 border-b border-border">
                 <label className="block text-[10px] font-mono text-text-muted uppercase tracking-wider mb-1.5">
-                  Metrics
+                  指标
                 </label>
                 <div className="flex gap-1 flex-wrap">
                   {monitor.metric_names.length === 0 ? (
                     <span className="text-[11px] font-mono text-text-muted">
-                      None
+                      暂无
                     </span>
                   ) : (
                     monitor.metric_names.map((m) => (
                       <Badge key={m} variant="info">
-                        {m}
+                        {metricLabel(m)}
                       </Badge>
                     ))
                   )}
@@ -391,7 +396,7 @@ export function MonitorDetailSidebar({
                 <div className="px-4 py-3 border-b border-border">
                   <label className="flex items-center gap-1 text-[10px] font-mono text-text-muted uppercase tracking-wider mb-1.5">
                     <Filter className="h-2.5 w-2.5" />
-                    Filters
+                    筛选条件
                   </label>
                   <div className="border border-border/40">
                     <table className="text-[11px] font-mono w-full border-collapse">
@@ -402,7 +407,7 @@ export function MonitorDetailSidebar({
                             className="border-b border-border/40 last:border-0"
                           >
                             <td className="text-text-muted px-2 py-0.5 whitespace-nowrap align-top border-r border-border/40">
-                              {key}
+                              {filterLabel(key)}
                             </td>
                             <td className="text-text px-2 py-0.5 break-all">
                               {val}
@@ -423,7 +428,7 @@ export function MonitorDetailSidebar({
                   disabled={actionPending !== null}
                 >
                   <SquarePen className="h-3 w-3" />
-                  Edit
+                  编辑
                 </Button>
                 {isActive ? (
                   <Button
@@ -437,7 +442,7 @@ export function MonitorDetailSidebar({
                     ) : (
                       <Pause className="h-3 w-3" />
                     )}
-                    Pause
+                    暂停
                   </Button>
                 ) : (
                   <Button
@@ -451,7 +456,7 @@ export function MonitorDetailSidebar({
                     ) : (
                       <Play className="h-3 w-3" />
                     )}
-                    Resume
+                    恢复
                   </Button>
                 )}
                 <Button
@@ -465,7 +470,7 @@ export function MonitorDetailSidebar({
                   ) : (
                     <Zap className="h-3 w-3" />
                   )}
-                  Trigger
+                  立即运行
                 </Button>
                 <Button
                   variant="destructive"
@@ -478,7 +483,7 @@ export function MonitorDetailSidebar({
                   ) : (
                     <Trash2 className="h-3 w-3" />
                   )}
-                  Delete
+                  删除
                 </Button>
               </div>
 
@@ -494,7 +499,9 @@ export function MonitorDetailSidebar({
                   }}
                   className="w-full justify-between"
                 >
-                  <span className="flex items-center gap-1.5">View runs</span>
+                  <span className="flex items-center gap-1.5">
+                    查看运行记录
+                  </span>
                   <ArrowRight className="h-3 w-3" />
                 </Button>
                 {monitor.last_run_id && (
@@ -505,7 +512,7 @@ export function MonitorDetailSidebar({
                     className="w-full justify-start"
                   >
                     <Eye className="h-3 w-3" />
-                    View last run
+                    查看上次运行
                   </Button>
                 )}
               </div>
@@ -530,9 +537,9 @@ export function MonitorDetailSidebar({
           if (!v && actionPending === "delete") return;
           setConfirmDelete(v);
         }}
-        title="Delete monitor"
-        description="Delete this monitor? The monitor stops firing and its existing runs are preserved. This action cannot be undone."
-        confirmLabel="Delete"
+        title="删除监控"
+        description="确定删除此监控吗？删除后将停止触发，但已存在的运行记录会保留。此操作无法撤销。"
+        confirmLabel="删除"
         onConfirm={handleDelete}
         destructive
       />
@@ -565,27 +572,10 @@ function formatSamplingRate(rate: number): string {
   return `${Math.round(rate * 100)}%`;
 }
 
-function formatCadence(cadence: string): string {
-  if (!cadence) return "—";
-  if (cadence.startsWith("cron:")) {
-    return `cron: ${cadence.slice("cron:".length).trim()}`;
-  }
-  switch (cadence) {
-    case "every_6h":
-      return "every 6h";
-    case "daily":
-      return "daily";
-    case "weekly":
-      return "weekly";
-    default:
-      return cadence;
-  }
-}
-
 function formatFilterValue(value: unknown): string {
   if (value == null) return "—";
   if (Array.isArray(value)) return value.join(", ");
-  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "boolean") return value ? "是" : "否";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }

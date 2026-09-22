@@ -34,6 +34,7 @@ import { queryKeys } from "@/lib/query/keys";
 import { MonitorStatus, SubscriptionPlan } from "@/lib/api/enums";
 import { extractErrorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/utils/cn";
+import { labelFor } from "@/lib/utils/labels";
 
 const LIST_POLL_INTERVAL_MS = 5000;
 const IMMINENT_WINDOW_MS = 2 * 60 * 1000;
@@ -55,7 +56,7 @@ export default function MonitorsPage() {
   const { values, set, page, limit, offset, setPage, totalPages } =
     useUrlState(URL_CONFIG);
 
-  useDocumentTitle("Monitors");
+  useDocumentTitle("评估监控");
 
   const [selectedMonitorId, setSelectedMonitorId] = useState<string | null>(
     null,
@@ -138,8 +139,8 @@ export default function MonitorsPage() {
   if (!currentProject) {
     return (
       <EmptyState
-        title="Select a project"
-        description="Choose a project to view monitors."
+        title="请选择项目"
+        description="选择一个项目以查看评估监控。"
       />
     );
   }
@@ -148,7 +149,7 @@ export default function MonitorsPage() {
     <div className="flex flex-col h-[calc(100vh-96px)] animate-fade-in">
       <div className="flex-shrink-0 space-y-3 pb-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-mono text-primary">Monitors</h1>
+          <h1 className="text-lg font-mono text-primary">评估监控</h1>
           <div className="flex items-center gap-2">
             {isHobby && (
               <Button
@@ -158,13 +159,13 @@ export default function MonitorsPage() {
               >
                 <Link href={plansHref}>
                   <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                  Upgrade to unlock monitors
+                  升级以解锁评估监控
                 </Link>
               </Button>
             )}
             <Button variant="primary" size="sm" onClick={handleOpenCreate}>
               <Radio className="h-3.5 w-3.5 mr-1.5" />
-              Create Monitor
+              创建监控
             </Button>
           </div>
         </div>
@@ -175,13 +176,13 @@ export default function MonitorsPage() {
             onValueChange={(v) => set({ status: v, page: "1" })}
           >
             <SelectTrigger className="w-36 h-9 text-xs flex-shrink-0">
-              <SelectValue placeholder="Status" />
+              <SelectValue placeholder="状态" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={STATUS_ALL}>All statuses</SelectItem>
+              <SelectItem value={STATUS_ALL}>全部状态</SelectItem>
               {Object.values(MonitorStatus).map((s) => (
                 <SelectItem key={s} value={s}>
-                  {s}
+                  {labelFor(s)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -194,7 +195,7 @@ export default function MonitorsPage() {
               className="text-xs text-warning hover:text-warning gap-1 flex-shrink-0"
             >
               <X className="h-3 w-3" />
-              Clear
+              清除
             </Button>
           )}
         </div>
@@ -210,11 +211,11 @@ export default function MonitorsPage() {
           />
         ) : !data || data.items.length === 0 ? (
           <EmptyState
-            title="No monitors"
+            title="暂无评估监控"
             description={
               hasActiveFilters
-                ? "Try adjusting your filters."
-                : "Create a monitor to automate evaluations."
+                ? "请尝试调整筛选条件。"
+                : "创建监控以自动执行评估。"
             }
           />
         ) : (

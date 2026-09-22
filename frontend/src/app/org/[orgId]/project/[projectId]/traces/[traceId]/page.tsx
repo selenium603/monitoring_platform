@@ -51,7 +51,7 @@ export default function TraceDetailPage({
   const projectPath = useProjectPath();
   const projectId = useProjectId() ?? "";
 
-  useDocumentTitle("Trace Detail");
+  useDocumentTitle("Trace 详情");
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
@@ -78,7 +78,7 @@ export default function TraceDetailPage({
       queryClient.invalidateQueries({
         queryKey: queryKeys.traces.all(projectId),
       });
-      toast({ title: "Trace deleted", variant: "success" });
+      toast({ title: "Trace 已删除", variant: "success" });
       router.push(projectPath + "/traces");
     } catch (err) {
       toast({ title: extractErrorMessage(err), variant: "error" });
@@ -96,7 +96,7 @@ export default function TraceDetailPage({
     return <ErrorState message={extractErrorMessage(traceQuery.error)} />;
 
   const trace = traceQuery.data;
-  if (!trace) return <ErrorState message="Trace not found" />;
+  if (!trace) return <ErrorState message="未找到 Trace" />;
 
   const scores = scoresQuery.data ?? [];
 
@@ -118,7 +118,7 @@ export default function TraceDetailPage({
             <span className="text-xs text-text-muted font-mono">
               {trace.trace_id}
             </span>
-            <Tooltip content={copiedId ? "Copied!" : "Copy trace ID"}>
+            <Tooltip content={copiedId ? "已复制" : "复制 Trace ID"}>
               <button
                 className="text-text-muted hover:text-text transition-colors"
                 onClick={handleCopyId}
@@ -139,7 +139,7 @@ export default function TraceDetailPage({
             onClick={() => setRunEvalOpen(true)}
           >
             <FlaskConical className="h-3 w-3" />
-            Evaluate
+            评估
           </Button>
           <Button
             variant="secondary"
@@ -153,7 +153,7 @@ export default function TraceDetailPage({
             )}
           >
             <BarChart3 className="h-3 w-3" />
-            Scores
+            分数
             {scores.length > 0 && (
               <Badge variant="info" className="ml-0.5 px-1.5 py-0">
                 {scores.length}
@@ -168,7 +168,7 @@ export default function TraceDetailPage({
             size="sm"
             onClick={() => setConfirmDelete(true)}
           >
-            <Trash2 className="h-3 w-3" /> Delete
+            <Trash2 className="h-3 w-3" /> 删除
           </Button>
         </div>
       </div>
@@ -176,15 +176,15 @@ export default function TraceDetailPage({
       <div ref={metadataRef} className="border-engraved bg-surface p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
           <div>
-            <span className="text-text-muted block">Status</span>
+            <span className="text-text-muted block">状态</span>
             <StatusBadge status={trace.status} />
           </div>
           <div>
-            <span className="text-text-muted block">Latency</span>
+            <span className="text-text-muted block">延迟</span>
             <span className="text-text">{formatDuration(latencyMs)}</span>
           </div>
           <div>
-            <span className="text-text-muted block">Total Tokens</span>
+            <span className="text-text-muted block">Token 总量</span>
             <span className="text-text">
               {formatTokens(trace.total_tokens)}
             </span>
@@ -195,13 +195,13 @@ export default function TraceDetailPage({
             <span className="text-text">{formatCost(trace.total_cost)}</span>
           </div> */}
           <div>
-            <span className="text-text-muted block">Started</span>
+            <span className="text-text-muted block">开始时间</span>
             <span className="text-text">
               {formatDateTime(trace.started_at)}
             </span>
           </div>
           <div>
-            <span className="text-text-muted block">Ended</span>
+            <span className="text-text-muted block">结束时间</span>
             <span className="text-text">{formatDateTime(trace.ended_at)}</span>
           </div>
           <div>
@@ -209,21 +209,21 @@ export default function TraceDetailPage({
             <span className="text-text">{trace.session_id ?? "—"}</span>
           </div>
           <div>
-            <span className="text-text-muted block">User</span>
+            <span className="text-text-muted block">用户</span>
             <span className="ph-no-capture text-text">
               {trace.user_id ?? "—"}
             </span>
           </div>
           <div>
-            <span className="text-text-muted block">Environment</span>
+            <span className="text-text-muted block">环境</span>
             <span className="text-text">{trace.environment ?? "—"}</span>
           </div>
           <div>
-            <span className="text-text-muted block">Release</span>
+            <span className="text-text-muted block">版本</span>
             <span className="text-text">{trace.release ?? "—"}</span>
           </div>
           <div className="col-span-2">
-            <span className="text-text-muted block mb-1">Tags</span>
+            <span className="text-text-muted block mb-1">标签</span>
             {trace.tags.length > 0 ? (
               <div className="flex gap-1 flex-wrap">
                 {trace.tags.map((tag) => (
@@ -278,9 +278,9 @@ export default function TraceDetailPage({
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="Delete trace"
-        description="Are you sure you want to delete this trace? This action cannot be undone."
-        confirmLabel="Delete"
+        title="删除 Trace"
+        description="确定要删除这条 Trace 吗？此操作无法撤销。"
+        confirmLabel="删除"
         onConfirm={handleDelete}
         destructive
       />

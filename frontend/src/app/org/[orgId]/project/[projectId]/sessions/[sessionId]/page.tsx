@@ -57,7 +57,7 @@ export default function SessionDetailPage({
   const projectPath = useProjectPath();
   const projectId = useProjectId() ?? "";
 
-  useDocumentTitle("Session Detail");
+  useDocumentTitle("Session 详情");
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
@@ -89,7 +89,7 @@ export default function SessionDetailPage({
       queryClient.invalidateQueries({
         queryKey: queryKeys.sessions.all(projectId),
       });
-      toast({ title: "Session deleted", variant: "success" });
+      toast({ title: "Session 已删除", variant: "success" });
       router.push(projectPath + "/sessions");
     } catch (err) {
       toast({ title: extractErrorMessage(err), variant: "error" });
@@ -104,7 +104,7 @@ export default function SessionDetailPage({
 
   if (isPending) return <LoadingState />;
   if (error) return <ErrorState message={extractErrorMessage(error)} />;
-  if (!session) return <ErrorState message="Session not found" />;
+  if (!session) return <ErrorState message="未找到 Session" />;
 
   const scores = scoresQuery.data ?? [];
 
@@ -136,12 +136,12 @@ export default function SessionDetailPage({
             <Button variant="ghost" size="icon" onClick={() => router.back()}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <h1 className="text-lg font-mono text-primary">Session</h1>
+            <h1 className="text-lg font-mono text-primary">Session 详情</h1>
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-text-muted font-mono">
                 {session.session_id}
               </span>
-              <Tooltip content={copiedId ? "Copied!" : "Copy session ID"}>
+              <Tooltip content={copiedId ? "已复制" : "复制 Session ID"}>
                 <button
                   className="text-text-muted hover:text-text transition-colors"
                   onClick={handleCopyId}
@@ -162,7 +162,7 @@ export default function SessionDetailPage({
               onClick={() => setRunEvalOpen(true)}
             >
               <FlaskConical className="h-3 w-3" />
-              Evaluate
+              评估
             </Button>
             <Button
               variant="secondary"
@@ -176,7 +176,7 @@ export default function SessionDetailPage({
               )}
             >
               <BarChart3 className="h-3 w-3" />
-              Scores
+              分数
               {scores.length > 0 && (
                 <Badge variant="info" className="ml-0.5 px-1.5 py-0">
                   {scores.length}
@@ -191,7 +191,7 @@ export default function SessionDetailPage({
               size="sm"
               onClick={() => setConfirmDelete(true)}
             >
-              <Trash2 className="h-3 w-3" /> Delete
+              <Trash2 className="h-3 w-3" /> 删除
             </Button>
           </div>
         </div>
@@ -199,27 +199,27 @@ export default function SessionDetailPage({
         <div className="border-engraved bg-surface p-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
             <div>
-              <span className="text-text-muted block">Traces</span>
+              <span className="text-text-muted block">Trace 数</span>
               <span className="text-text">{session.trace_count}</span>
             </div>
             <div>
-              <span className="text-text-muted block">Total Spans</span>
+              <span className="text-text-muted block">Span 总数</span>
               <span className="text-text">{session.total_span_count}</span>
             </div>
             <div>
-              <span className="text-text-muted block">Error</span>
+              <span className="text-text-muted block">错误</span>
               <Badge variant={session.has_error ? "error" : "success"}>
-                {session.has_error ? "Yes" : "No"}
+                {session.has_error ? "是" : "否"}
               </Badge>
             </div>
             <div>
-              <span className="text-text-muted block">Total Latency</span>
+              <span className="text-text-muted block">总延迟</span>
               <span className="text-text">
                 {formatDuration(session.total_latency_ms)}
               </span>
             </div>
             <div>
-              <span className="text-text-muted block">Total Tokens</span>
+              <span className="text-text-muted block">Token 总量</span>
               <span className="text-text">
                 {formatTokens(session.total_tokens)}
               </span>
@@ -232,25 +232,25 @@ export default function SessionDetailPage({
               </span>
             </div> */}
             <div>
-              <span className="text-text-muted block">First Trace</span>
+              <span className="text-text-muted block">首个 Trace</span>
               <span className="text-text">
                 {formatDateTime(session.first_trace_at)}
               </span>
             </div>
             <div>
-              <span className="text-text-muted block">Last Trace</span>
+              <span className="text-text-muted block">最近 Trace</span>
               <span className="text-text">
                 {formatDateTime(session.last_trace_at)}
               </span>
             </div>
             <div>
-              <span className="text-text-muted block">User</span>
+              <span className="text-text-muted block">用户</span>
               <span className="ph-no-capture text-text">
                 {session.user_id ?? "—"}
               </span>
             </div>
             <div className="col-span-2">
-              <span className="text-text-muted block mb-1">Tags</span>
+              <span className="text-text-muted block mb-1">标签</span>
               {session.tags.length > 0 ? (
                 <div className="flex gap-1 flex-wrap">
                   {session.tags.map((tag) => (
@@ -270,7 +270,7 @@ export default function SessionDetailPage({
       <div className="flex-1 min-h-0 flex flex-col">
         <div className="flex-shrink-0 pb-2">
           <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider">
-            Traces · {session.trace_count}
+            Trace · {session.trace_count}
           </h2>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto">
@@ -318,9 +318,9 @@ export default function SessionDetailPage({
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="Delete session"
-        description="Delete this session and all associated traces? This cannot be undone."
-        confirmLabel="Delete"
+        title="删除 Session"
+        description="确定要删除这个 Session 及其全部 Trace 吗？此操作无法撤销。"
+        confirmLabel="删除"
         onConfirm={handleDelete}
         destructive
       />

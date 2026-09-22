@@ -12,7 +12,7 @@ export function ErrorState({ message, onRetry }: ErrorStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <AlertTriangle className="h-10 w-10 text-error mb-4" />
-      <h3 className="text-sm font-mono text-text-dim">Something went wrong</h3>
+      <h3 className="text-sm font-mono text-text-dim">出了点问题</h3>
       <p className="mt-1 text-xs text-text-muted max-w-sm">{message}</p>
       {onRetry && (
         <Button
@@ -21,7 +21,7 @@ export function ErrorState({ message, onRetry }: ErrorStateProps) {
           className="mt-4"
           onClick={onRetry}
         >
-          Retry
+          重试
         </Button>
       )}
     </div>

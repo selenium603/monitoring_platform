@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/Select";
 import { DateTimePicker } from "@/components/common/DateTimePicker";
 import { extractErrorMessage } from "@/lib/api/client";
+import { labelFor, metricLabel } from "@/lib/utils/labels";
 
 function BarChart({
   data,
@@ -68,7 +69,7 @@ export default function AnalyticsPage() {
   const { currentProject } = useProject();
   const projectId = currentProject?.id ?? "";
 
-  useDocumentTitle("Analytics");
+  useDocumentTitle("分析");
 
   const [metric, setMetric] = useState<string>(AnalyticsMetric.volume);
   const [granularity, setGranularity] = useState<string>(
@@ -113,8 +114,8 @@ export default function AnalyticsPage() {
   if (!currentProject) {
     return (
       <EmptyState
-        title="Select a project"
-        description="Choose a project to view analytics."
+        title="请选择项目"
+        description="选择一个项目以查看分析数据。"
       />
     );
   }
@@ -124,17 +125,17 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <h1 className="text-lg font-mono text-primary">Analytics</h1>
+      <h1 className="text-lg font-mono text-primary">分析</h1>
 
       <div className="flex flex-wrap items-center gap-3">
         <Select value={metric} onValueChange={setMetric}>
           <SelectTrigger className="w-36">
-            <SelectValue placeholder="Metric" />
+            <SelectValue placeholder="指标" />
           </SelectTrigger>
           <SelectContent>
             {Object.values(AnalyticsMetric).map((m) => (
               <SelectItem key={m} value={m}>
-                {m}
+                {labelFor(m)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -146,25 +147,25 @@ export default function AnalyticsPage() {
           <SelectContent>
             {Object.values(AnalyticsGranularity).map((g) => (
               <SelectItem key={g} value={g}>
-                {g}
+                {labelFor(g)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-text-muted font-mono">From</span>
+          <span className="text-xs text-text-muted font-mono">从</span>
           <DateTimePicker
             value={startDate}
             onChange={setStartDate}
-            placeholder="From"
+            placeholder="开始时间"
           />
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-text-muted font-mono">To</span>
+          <span className="text-xs text-text-muted font-mono">到</span>
           <DateTimePicker
             value={endDate}
             onChange={setEndDate}
-            placeholder="To"
+            placeholder="结束时间"
           />
         </div>
       </div>
@@ -178,31 +179,31 @@ export default function AnalyticsPage() {
         />
       ) : !analyticsData || (analyticsData as unknown[]).length === 0 ? (
         <EmptyState
-          title="No analytics data"
-          description="Data will appear once traces are recorded."
+          title="暂无分析数据"
+          description="记录 Trace 后，分析数据会显示在这里。"
         />
       ) : (
         <div className="space-y-6">
           {metric === "models" ? (
             <div className="border-engraved bg-surface p-4">
               <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider mb-3">
-                Top Models
+                常用模型
               </h2>
               <div className="border border-border overflow-x-auto">
                 <table className="w-full text-xs font-mono">
                   <thead>
                     <tr className="border-b border-border bg-surface-hi">
                       <th className="text-left px-3 py-2 text-text-muted font-normal">
-                        Model
+                        模型
                       </th>
                       <th className="text-left px-3 py-2 text-text-muted font-normal">
-                        Calls
+                        调用次数
                       </th>
                       <th className="text-left px-3 py-2 text-text-muted font-normal">
-                        Tokens
+                        Token
                       </th>
                       <th className="text-left px-3 py-2 text-text-muted font-normal">
-                        Cost
+                        成本
                       </th>
                     </tr>
                   </thead>
@@ -228,7 +229,7 @@ export default function AnalyticsPage() {
           ) : metric === "tokens" || metric === "cost" ? (
             <div className="border-engraved bg-surface p-4">
               <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider mb-3">
-                {metric === "tokens" ? "Token Usage" : "Cost"} Over Time
+                {metric === "tokens" ? "Token 用量" : "成本"}趋势
               </h2>
               <BarChart
                 data={analyticsData as unknown as Record<string, unknown>[]}
@@ -244,7 +245,7 @@ export default function AnalyticsPage() {
           ) : (
             <div className="border-engraved bg-surface p-4">
               <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider mb-3">
-                Trace {metric} Over Time
+                Trace {labelFor(metric)}趋势
               </h2>
               <BarChart
                 data={analyticsData as unknown as Record<string, unknown>[]}
@@ -266,29 +267,29 @@ export default function AnalyticsPage() {
           {scoreSummary.length > 0 && (
             <div className="border-engraved bg-surface p-4">
               <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider mb-3">
-                Score Summary
+                分数汇总
               </h2>
               <div className="border border-border overflow-x-auto">
                 <table className="w-full text-xs font-mono">
                   <thead>
                     <tr className="border-b border-border bg-surface-hi">
                       <th className="text-left px-3 py-2 text-text-muted font-normal">
-                        Metric
+                        指标
                       </th>
                       <th className="text-left px-3 py-2 text-text-muted font-normal">
-                        Avg
+                        平均
                       </th>
                       <th className="text-left px-3 py-2 text-text-muted font-normal">
-                        Min
+                        最小
                       </th>
                       <th className="text-left px-3 py-2 text-text-muted font-normal">
-                        Max
+                        最大
                       </th>
                       <th className="text-left px-3 py-2 text-text-muted font-normal">
-                        Success
+                        成功
                       </th>
                       <th className="text-left px-3 py-2 text-text-muted font-normal">
-                        Failed
+                        失败
                       </th>
                     </tr>
                   </thead>
@@ -298,7 +299,9 @@ export default function AnalyticsPage() {
                         key={s.metric_name}
                         className="border-b border-border"
                       >
-                        <td className="px-3 py-2 text-text">{s.metric_name}</td>
+                        <td className="px-3 py-2 text-text">
+                          {metricLabel(s.metric_name)}
+                        </td>
                         <td className="px-3 py-2 text-text-dim">
                           {s.avg_score?.toFixed(2) ?? "—"}
                         </td>

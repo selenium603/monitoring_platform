@@ -29,7 +29,7 @@ function toDatetimeLocal(date: Date): string {
 export function DateTimePicker({
   value,
   onChange,
-  placeholder = "Pick date",
+  placeholder = "选择日期",
   className,
 }: DateTimePickerProps) {
   const [open, setOpen] = useState(false);
@@ -73,7 +73,7 @@ export function DateTimePicker({
           )}
         >
           <CalendarDays className="h-3.5 w-3.5 text-text-dim flex-shrink-0" />
-          {selected ? format(selected, "MMM d, yyyy  HH:mm") : placeholder}
+          {selected ? format(selected, "yyyy年M月d日 HH:mm") : placeholder}
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -90,7 +90,7 @@ export function DateTimePicker({
           />
           <div className="border-t border-border px-3 py-2 flex items-center gap-2">
             <span className="text-[10px] text-text-muted font-mono uppercase tracking-wide">
-              Time
+              时间
             </span>
             <TimeInput
               value={timeValue || "00:00"}

@@ -53,6 +53,12 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useEvalRunTracker } from "@/components/providers/EvalRunTrackerProvider";
 import { extractErrorMessage } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
+import {
+  cadenceLabel,
+  filterLabel,
+  labelFor,
+  metricLabel,
+} from "@/lib/utils/labels";
 
 const RUNS_POLL_INTERVAL_MS = 5000;
 const DETAIL_POLL_INTERVAL_MS = 5000;
@@ -133,7 +139,7 @@ export default function MonitorDetailPage() {
   const targetMode: "trace" | "session" =
     monitor?.target_type === "SESSION" ? "session" : "trace";
 
-  useDocumentTitle(monitor?.name ? `${monitor.name} · Runs` : "Monitor");
+  useDocumentTitle(monitor?.name ? `${monitor.name} · 运行记录` : "评估监控");
 
   const filtersList = useMemo<Array<[string, string]>>(() => {
     if (!monitor || !monitor.filters) return [];
@@ -166,7 +172,7 @@ export default function MonitorDetailPage() {
     setActionPending("pause");
     try {
       await pauseMonitor(monitor.id);
-      toast({ title: "Monitor paused", variant: "success" });
+      toast({ title: "评估监控已暂停", variant: "success" });
       invalidateAll();
     } catch (err) {
       toast({ title: extractErrorMessage(err), variant: "error" });
@@ -180,7 +186,7 @@ export default function MonitorDetailPage() {
     setActionPending("resume");
     try {
       await resumeMonitor(monitor.id);
-      toast({ title: "Monitor resumed", variant: "success" });
+      toast({ title: "评估监控已恢复", variant: "success" });
       invalidateAll();
     } catch (err) {
       toast({ title: extractErrorMessage(err), variant: "error" });
@@ -200,8 +206,8 @@ export default function MonitorDetailPage() {
         targetIds: [],
       });
       toast({
-        title: "Run queued",
-        description: "A new run has been kicked off for this monitor.",
+        title: "运行已排队",
+        description: "此评估监控的新运行已启动。",
         variant: "success",
       });
       invalidateAll();
@@ -220,7 +226,7 @@ export default function MonitorDetailPage() {
     setActionPending("delete");
     try {
       await deleteMonitor(monitor.id);
-      toast({ title: "Monitor deleted", variant: "success" });
+      toast({ title: "评估监控已删除", variant: "success" });
       queryClient.invalidateQueries({
         queryKey: queryKeys.evaluations.monitors.all(projectId),
       });
@@ -249,8 +255,8 @@ export default function MonitorDetailPage() {
   if (!monitor) {
     return (
       <EmptyState
-        title="Monitor not found"
-        description="This monitor may have been deleted."
+        title="未找到评估监控"
+        description="该评估监控可能已被删除。"
       />
     );
   }
@@ -263,7 +269,7 @@ export default function MonitorDetailPage() {
           className="inline-flex items-center gap-1 text-[11px] font-mono text-text-muted hover:text-text transition-colors mb-2"
         >
           <ArrowLeft className="h-3 w-3" />
-          Back to monitors
+          返回评估监控
         </Link>
 
         <div className="border border-border bg-surface">
@@ -275,7 +281,7 @@ export default function MonitorDetailPage() {
                   {monitor.name}
                 </h1>
                 <StatusBadge status={monitor.status} />
-                <Badge variant="default">{monitor.target_type}</Badge>
+                <Badge variant="default">{labelFor(monitor.target_type)}</Badge>
               </div>
               <div className="flex items-center gap-1.5 min-w-0">
                 <span
@@ -284,11 +290,11 @@ export default function MonitorDetailPage() {
                 >
                   {monitor.id}
                 </span>
-                <Tooltip content={copiedId ? "Copied!" : "Copy monitor ID"}>
+                <Tooltip content={copiedId ? "已复制" : "复制监控 ID"}>
                   <button
                     className="text-text-muted hover:text-text transition-colors flex-shrink-0"
                     onClick={handleCopyId}
-                    aria-label="Copy monitor ID"
+                    aria-label="复制监控 ID"
                   >
                     {copiedId ? (
                       <Check className="h-3 w-3 text-success" />
@@ -307,7 +313,7 @@ export default function MonitorDetailPage() {
                 disabled={actionPending !== null}
               >
                 <SquarePen className="h-3 w-3" />
-                Edit
+                编辑
               </Button>
               {isActive ? (
                 <Button
@@ -321,7 +327,7 @@ export default function MonitorDetailPage() {
                   ) : (
                     <Pause className="h-3 w-3" />
                   )}
-                  Pause
+                  暂停
                 </Button>
               ) : (
                 <Button
@@ -335,7 +341,7 @@ export default function MonitorDetailPage() {
                   ) : (
                     <Play className="h-3 w-3" />
                   )}
-                  Resume
+                  恢复
                 </Button>
               )}
               <Button
@@ -349,7 +355,7 @@ export default function MonitorDetailPage() {
                 ) : (
                   <Zap className="h-3 w-3" />
                 )}
-                Trigger
+                立即运行
               </Button>
               <Button
                 variant="destructive"
@@ -362,31 +368,31 @@ export default function MonitorDetailPage() {
                 ) : (
                   <Trash2 className="h-3 w-3" />
                 )}
-                Delete
+                删除
               </Button>
             </div>
           </div>
 
           <div className="px-4 py-3 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 text-xs font-mono">
             <SummaryCell
-              label="Cadence"
-              value={formatCadence(monitor.cadence)}
+              label="运行周期"
+              value={cadenceLabel(monitor.cadence)}
             />
             <SummaryCell
-              label="Sampling"
+              label="采样比例"
               value={formatSamplingRate(monitor.sampling_rate)}
             />
             <SummaryCell
-              label="Model"
-              value={monitor.model ?? "default"}
+              label="模型"
+              value={monitor.model ?? "默认"}
               dim={!monitor.model}
             />
             <SummaryCell
-              label="Only if changed"
-              value={monitor.only_if_changed ? "Yes" : "No"}
+              label="仅数据变化时运行"
+              value={monitor.only_if_changed ? "是" : "否"}
             />
             <SummaryCell
-              label="Last run"
+              label="上次运行"
               value={
                 monitor.last_run_at
                   ? formatRelativeTime(monitor.last_run_at)
@@ -395,7 +401,7 @@ export default function MonitorDetailPage() {
               icon={<Clock className="h-2.5 w-2.5" />}
             />
             <SummaryCell
-              label="Next run"
+              label="下次运行"
               value={
                 monitor.next_run_at
                   ? formatRelativeTime(monitor.next_run_at)
@@ -404,12 +410,12 @@ export default function MonitorDetailPage() {
               icon={<Clock className="h-2.5 w-2.5" />}
             />
             <SummaryCell
-              label="Created"
+              label="创建时间"
               value={formatDateTime(monitor.created_at)}
               icon={<Clock className="h-2.5 w-2.5" />}
             />
             <SummaryCell
-              label="Updated"
+              label="更新时间"
               value={formatDateTime(monitor.updated_at)}
               icon={<Clock className="h-2.5 w-2.5" />}
             />
@@ -417,17 +423,17 @@ export default function MonitorDetailPage() {
 
           <div className="px-4 py-3 border-t border-border">
             <span className="block text-[10px] font-mono text-text-muted uppercase tracking-wider mb-1.5">
-              Metrics
+              指标
             </span>
             <div className="flex gap-1 flex-wrap">
               {monitor.metric_names.length === 0 ? (
                 <span className="text-[11px] font-mono text-text-muted">
-                  None
+                  无
                 </span>
               ) : (
                 monitor.metric_names.map((m) => (
                   <Badge key={m} variant="info">
-                    {m}
+                    {metricLabel(m)}
                   </Badge>
                 ))
               )}
@@ -438,7 +444,7 @@ export default function MonitorDetailPage() {
             <div className="px-4 py-3 border-t border-border">
               <span className="flex items-center gap-1 text-[10px] font-mono text-text-muted uppercase tracking-wider mb-1.5">
                 <Filter className="h-2.5 w-2.5" />
-                Filters
+                筛选条件
               </span>
               <div className="border border-border/40">
                 <table className="text-[11px] font-mono w-full border-collapse">
@@ -449,7 +455,7 @@ export default function MonitorDetailPage() {
                         className="border-b border-border/40 last:border-0"
                       >
                         <td className="text-text-muted px-2 py-0.5 whitespace-nowrap align-top border-r border-border/40">
-                          {key}
+                          {filterLabel(key)}
                         </td>
                         <td className="text-text px-2 py-0.5 break-all">
                           {val}
@@ -464,7 +470,7 @@ export default function MonitorDetailPage() {
         </div>
 
         <h2 className="text-sm font-mono text-text-muted uppercase tracking-wider mt-4 mb-2">
-          Runs
+          运行记录
           {runsQuery.data && (
             <span className="ml-2 text-text-dim normal-case tracking-normal">
               · {runsQuery.data.total}
@@ -483,8 +489,8 @@ export default function MonitorDetailPage() {
           />
         ) : !runsQuery.data || runsQuery.data.items.length === 0 ? (
           <EmptyState
-            title="No runs yet"
-            description="Runs will appear here once the monitor has fired at least once."
+            title="暂无运行记录"
+            description="评估监控至少执行一次后，运行记录会显示在这里。"
           />
         ) : (
           <>
@@ -537,9 +543,9 @@ export default function MonitorDetailPage() {
           if (!v && actionPending === "delete") return;
           setConfirmDelete(v);
         }}
-        title="Delete monitor"
-        description="Delete this monitor? The monitor stops firing and its existing runs are preserved. This action cannot be undone."
-        confirmLabel="Delete"
+        title="删除评估监控"
+        description="确定要删除此评估监控吗？它将停止运行，但已有运行记录会保留。此操作无法撤销。"
+        confirmLabel="删除"
         onConfirm={handleDelete}
         destructive
       />
@@ -581,23 +587,6 @@ function formatSamplingRate(rate: number): string {
   if (rate == null || Number.isNaN(rate)) return "—";
   if (rate >= 1) return "100%";
   return `${Math.round(rate * 100)}%`;
-}
-
-function formatCadence(cadence: string): string {
-  if (!cadence) return "—";
-  if (cadence.startsWith("cron:")) {
-    return `cron: ${cadence.slice("cron:".length).trim()}`;
-  }
-  switch (cadence) {
-    case "every_6h":
-      return "every 6h";
-    case "daily":
-      return "daily";
-    case "weekly":
-      return "weekly";
-    default:
-      return cadence;
-  }
 }
 
 function formatFilterValue(value: unknown): string {

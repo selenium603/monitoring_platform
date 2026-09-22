@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/Select";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { labelFor, metricLabel, sourceLabel } from "@/lib/utils/labels";
 
 const ALL = "all";
 
@@ -57,7 +58,7 @@ export default function SessionScoresPage() {
   const { values, set, page, limit, offset, setPage, totalPages } =
     useUrlState(URL_CONFIG);
 
-  useDocumentTitle("Session Scores");
+  useDocumentTitle("Session 分数");
 
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
@@ -130,8 +131,8 @@ export default function SessionScoresPage() {
   if (!currentProject) {
     return (
       <EmptyState
-        title="Select a project"
-        description="Choose a project to view session scores."
+        title="请选择项目"
+        description="选择一个项目以查看 Session 分数。"
       />
     );
   }
@@ -140,7 +141,7 @@ export default function SessionScoresPage() {
     <div className="flex flex-col h-[calc(100vh-96px)] animate-fade-in">
       <div className="flex-shrink-0 space-y-3 pb-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-mono text-primary">Session Scores</h1>
+          <h1 className="text-lg font-mono text-primary">Session 分数</h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -149,13 +150,13 @@ export default function SessionScoresPage() {
             onValueChange={(v) => set({ name: v, page: "1" })}
           >
             <SelectTrigger className="w-40 h-9 text-xs flex-shrink-0">
-              <SelectValue placeholder="Metric" />
+              <SelectValue placeholder="指标" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>All metrics</SelectItem>
+              <SelectItem value={ALL}>全部指标</SelectItem>
               {metricsQuery.data?.map((m) => (
                 <SelectItem key={m.name} value={m.name}>
-                  {m.name}
+                  {metricLabel(m.name)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -166,13 +167,13 @@ export default function SessionScoresPage() {
             onValueChange={(v) => set({ status: v, page: "1" })}
           >
             <SelectTrigger className="w-34 h-9 text-xs flex-shrink-0">
-              <SelectValue placeholder="Status" />
+              <SelectValue placeholder="状态" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>All statuses</SelectItem>
+              <SelectItem value={ALL}>全部状态</SelectItem>
               {Object.values(ScoreStatus).map((s) => (
                 <SelectItem key={s} value={s}>
-                  {s}
+                  {labelFor(s)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -183,13 +184,13 @@ export default function SessionScoresPage() {
             onValueChange={(v) => set({ source: v, page: "1" })}
           >
             <SelectTrigger className="w-34 h-9 text-xs flex-shrink-0">
-              <SelectValue placeholder="Source" />
+              <SelectValue placeholder="来源" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>All sources</SelectItem>
+              <SelectItem value={ALL}>全部来源</SelectItem>
               {Object.values(ScoreSource).map((s) => (
                 <SelectItem key={s} value={s}>
-                  {s}
+                  {sourceLabel(s)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -205,21 +206,21 @@ export default function SessionScoresPage() {
           <DebouncedInput
             value={values.eval_run_id}
             onChange={(v) => set({ eval_run_id: v, page: "1" })}
-            placeholder="Eval run ID"
+            placeholder="评估运行 ID"
             className="w-28 h-9 flex-shrink-0"
           />
 
           <DateTimePicker
             value={values.date_from}
             onChange={(v) => set({ date_from: v, page: "1" })}
-            placeholder="From"
+            placeholder="开始时间"
             className="flex-shrink-0"
           />
 
           <DateTimePicker
             value={values.date_to}
             onChange={(v) => set({ date_to: v, page: "1" })}
-            placeholder="Before"
+            placeholder="结束时间之前"
             className="flex-shrink-0"
           />
 
@@ -231,7 +232,7 @@ export default function SessionScoresPage() {
               className="text-xs text-warning hover:text-warning gap-1 flex-shrink-0"
             >
               <X className="h-3 w-3" />
-              Clear
+              清除
             </Button>
           )}
         </div>
@@ -247,11 +248,11 @@ export default function SessionScoresPage() {
           />
         ) : !data || data.items.length === 0 ? (
           <EmptyState
-            title="No scores"
+            title="暂无分数"
             description={
               hasActiveFilters
-                ? "Try adjusting your filters."
-                : "Run an evaluation or annotate a session to produce scores."
+                ? "请尝试调整筛选条件。"
+                : "执行评估或标注 Session 后，会生成分数。"
             }
           />
         ) : (

@@ -7,13 +7,10 @@ import type {
   ScoreStatus,
   MonitorStatus,
 } from "@/lib/api/enums";
+import { labelFor } from "@/lib/utils/labels";
 
 type StatusType =
-  | TraceStatus
-  | EvaluationStatus
-  | ScoreStatus
-  | MonitorStatus
-  | string;
+  TraceStatus | EvaluationStatus | ScoreStatus | MonitorStatus | string;
 
 const statusVariantMap: Record<string, BadgeProps["variant"]> = {
   COMPLETED: "success",
@@ -33,5 +30,5 @@ const statusVariantMap: Record<string, BadgeProps["variant"]> = {
 
 export function StatusBadge({ status }: { status: StatusType }) {
   const variant = statusVariantMap[status] ?? "default";
-  return <Badge variant={variant}>{status}</Badge>;
+  return <Badge variant={variant}>{labelFor(status)}</Badge>;
 }

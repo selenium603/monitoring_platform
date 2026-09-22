@@ -40,6 +40,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useEvalRunTracker } from "@/components/providers/EvalRunTrackerProvider";
 import { extractErrorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/utils/cn";
+import { labelFor, metricLabel } from "@/lib/utils/labels";
 
 const DEFAULT_MODEL_VALUE = "__default__";
 const ANY_STATUS_VALUE = "__any__";
@@ -227,7 +228,7 @@ export function EvalRunCreateSidebar({
         mode,
         targetIds: [],
       });
-      toast({ title: "Evaluation run queued", variant: "success" });
+      toast({ title: "评估运行已排队", variant: "success" });
       onSubmitted?.();
       onClose();
     } catch (err) {
@@ -251,7 +252,7 @@ export function EvalRunCreateSidebar({
       >
         <div className="flex items-center justify-between h-12 px-4 border-b border-border flex-shrink-0">
           <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider">
-            Create {mode} evaluation run
+            创建 {mode === "trace" ? "Trace" : "Session"} 评估运行
           </h2>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-3.5 w-3.5" />
@@ -261,12 +262,12 @@ export function EvalRunCreateSidebar({
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="px-4 py-3 border-b border-border">
             <label className="block text-xs font-mono text-text-primary uppercase tracking-wide mb-1.5">
-              Name
+              名称
             </label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Eval run name (optional)"
+              placeholder="评估运行名称（可选）"
               className="h-8 text-xs"
               disabled={submitting}
             />
@@ -275,7 +276,7 @@ export function EvalRunCreateSidebar({
           <div className="px-4 py-3 border-b border-border">
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-mono text-text-primary uppercase tracking-wide">
-                Metrics <span className="text-error">*</span>
+                指标 <span className="text-error">*</span>
               </label>
               <span className="text-[10px] font-mono text-text-muted">
                 {selectedMetrics.size}/{metrics.length}
@@ -283,7 +284,7 @@ export function EvalRunCreateSidebar({
             </div>
             {metricsQuery.isPending ? (
               <p className="text-[11px] font-mono text-text-muted py-2">
-                Loading metrics…
+                正在加载指标…
               </p>
             ) : metricsQuery.error ? (
               <p className="text-[11px] font-mono text-error py-2">
@@ -291,7 +292,7 @@ export function EvalRunCreateSidebar({
               </p>
             ) : metrics.length === 0 ? (
               <p className="text-[11px] font-mono text-text-muted py-2">
-                No metrics available
+                暂无可用指标
               </p>
             ) : (
               <div className="max-h-64 overflow-y-auto border border-border/40 divide-y divide-border/40">
@@ -314,7 +315,7 @@ export function EvalRunCreateSidebar({
                       />
                       <div className="flex-1 min-w-0">
                         <span className="text-xs font-mono text-text truncate block">
-                          {metric.name}
+                          {metricLabel(metric.name)}
                         </span>
                         {metric.description && (
                           <p className="mt-0.5 text-[11px] font-mono text-text-muted line-clamp-2">
@@ -332,12 +333,12 @@ export function EvalRunCreateSidebar({
           <div className="px-4 py-3 border-b border-border">
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs font-mono text-text-primary uppercase tracking-wide">
-                Filters
+                筛选条件
               </label>
               <span className="text-[10px] font-mono text-text-muted">
                 {activeFilterCount === 0
-                  ? "all matching"
-                  : `${activeFilterCount} active`}
+                  ? "匹配全部"
+                  : `${activeFilterCount} 项已启用`}
               </span>
             </div>
             {mode === "trace" ? (
@@ -358,7 +359,7 @@ export function EvalRunCreateSidebar({
           <div className="px-4 py-3 border-b border-border">
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-mono text-text-primary uppercase tracking-wide">
-                Sampling rate
+                采样比例
               </label>
               <span className="text-[11px] font-mono text-text">
                 {formatSamplingRate(samplingRate)}
@@ -375,13 +376,13 @@ export function EvalRunCreateSidebar({
               className="w-full accent-primary"
             />
             <p className="mt-1 text-[10px] font-mono text-text-muted">
-              Fraction of matching {mode}s to evaluate.
+              对匹配的 {mode === "trace" ? "Trace" : "Session"} 按比例进行评估。
             </p>
           </div>
 
           <div className="px-4 py-3 border-b border-border">
             <label className="block text-xs font-mono text-text-primary uppercase tracking-wide mb-1.5">
-              Model
+              模型
             </label>
             <Select
               value={selectedModel}
@@ -389,10 +390,10 @@ export function EvalRunCreateSidebar({
               disabled={submitting || providersQuery.isPending}
             >
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Default" />
+                <SelectValue placeholder="默认" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={DEFAULT_MODEL_VALUE}>Default</SelectItem>
+                <SelectItem value={DEFAULT_MODEL_VALUE}>默认</SelectItem>
                 {providers.map((p) => (
                   <SelectGroup key={p.key}>
                     <SelectLabel>{p.name}</SelectLabel>
@@ -426,7 +427,7 @@ export function EvalRunCreateSidebar({
                   disabled={submitting}
                 />
                 <span className="text-xs font-mono text-text-primary uppercase tracking-wide">
-                  Customize signal weights
+                  自定义信号权重
                 </span>
               </label>
               {customizeWeights && (
@@ -471,7 +472,7 @@ export function EvalRunCreateSidebar({
             onClick={onClose}
             disabled={submitting}
           >
-            Cancel
+            取消
           </Button>
           <Button
             variant="primary"
@@ -484,7 +485,7 @@ export function EvalRunCreateSidebar({
             ) : (
               <FlaskConical className="h-3 w-3" />
             )}
-            {submitting ? "Submitting…" : "Submit"}
+            {submitting ? "提交中…" : "提交"}
           </Button>
         </div>
       </div>
@@ -509,45 +510,45 @@ function TraceFilterFields({
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <FieldLabel label="Started fter">
+        <FieldLabel label="开始时间之后">
           <DateTimePicker
             value={value.date_from}
             onChange={(v) => set("date_from", v)}
-            placeholder="After..."
+            placeholder="开始时间之后"
           />
         </FieldLabel>
-        <FieldLabel label="Started before">
+        <FieldLabel label="开始时间之前">
           <DateTimePicker
             value={value.date_to}
             onChange={(v) => set("date_to", v)}
-            placeholder="Before..."
+            placeholder="开始时间之前"
           />
         </FieldLabel>
       </div>
-      <FieldLabel label="Trace status">
+      <FieldLabel label="Trace 状态">
         <Select
           value={value.status}
           onValueChange={(v) => set("status", v)}
           disabled={disabled}
         >
           <SelectTrigger className="h-8 text-xs">
-            <SelectValue placeholder="Any" />
+            <SelectValue placeholder="任意" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY_STATUS_VALUE}>Any</SelectItem>
+            <SelectItem value={ANY_STATUS_VALUE}>任意</SelectItem>
             {Object.values(TraceStatus).map((s) => (
               <SelectItem key={s} value={s}>
-                {s}
+                {labelFor(s)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </FieldLabel>
-      <FieldLabel label="Trace name contains">
+      <FieldLabel label="Trace 名称包含">
         <Input
           value={value.name}
           onChange={(e) => set("name", e.target.value)}
-          placeholder="substring match"
+          placeholder="输入名称片段"
           className="h-8 text-xs"
           disabled={disabled}
         />
@@ -557,26 +558,26 @@ function TraceFilterFields({
           <Input
             value={value.session_id}
             onChange={(e) => set("session_id", e.target.value)}
-            placeholder="exact match"
+            placeholder="精确匹配"
             className="h-8 text-xs"
             disabled={disabled}
           />
         </FieldLabel>
-        <FieldLabel label="User ID">
+        <FieldLabel label="用户 ID">
           <Input
             value={value.user_id}
             onChange={(e) => set("user_id", e.target.value)}
-            placeholder="exact match"
+            placeholder="精确匹配"
             className="h-8 text-xs"
             disabled={disabled}
           />
         </FieldLabel>
       </div>
-      <FieldLabel label="Tags (comma-separated)">
+      <FieldLabel label="标签（英文逗号分隔）">
         <Input
           value={value.tags}
           onChange={(e) => set("tags", e.target.value)}
-          placeholder="e.g. production, v2"
+          placeholder="例如：production, v2"
           className="h-8 text-xs"
           disabled={disabled}
         />
@@ -602,64 +603,64 @@ function SessionFilterFields({
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <FieldLabel label="Started after">
+        <FieldLabel label="开始时间之后">
           <DateTimePicker
             value={value.date_from}
             onChange={(v) => set("date_from", v)}
-            placeholder="After..."
+            placeholder="开始时间之后"
           />
         </FieldLabel>
-        <FieldLabel label="Started before">
+        <FieldLabel label="开始时间之前">
           <DateTimePicker
             value={value.date_to}
             onChange={(v) => set("date_to", v)}
-            placeholder="Before..."
+            placeholder="开始时间之前"
           />
         </FieldLabel>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <FieldLabel label="User ID">
+        <FieldLabel label="用户 ID">
           <Input
             value={value.user_id}
             onChange={(e) => set("user_id", e.target.value)}
-            placeholder="exact match"
+            placeholder="精确匹配"
             className="h-8 text-xs"
             disabled={disabled}
           />
         </FieldLabel>
-        <FieldLabel label="Has error">
+        <FieldLabel label="包含错误">
           <Select
             value={value.has_error}
             onValueChange={(v) => set("has_error", v)}
             disabled={disabled}
           >
             <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="Any" />
+              <SelectValue placeholder="任意" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ANY_HAS_ERROR_VALUE}>Any</SelectItem>
-              <SelectItem value="true">With errors</SelectItem>
-              <SelectItem value="false">Without errors</SelectItem>
+              <SelectItem value={ANY_HAS_ERROR_VALUE}>任意</SelectItem>
+              <SelectItem value="true">有错误</SelectItem>
+              <SelectItem value="false">无错误</SelectItem>
             </SelectContent>
           </Select>
         </FieldLabel>
       </div>
-      <FieldLabel label="Tags (comma-separated)">
+      <FieldLabel label="标签（英文逗号分隔）">
         <Input
           value={value.tags}
           onChange={(e) => set("tags", e.target.value)}
-          placeholder="e.g. production, v2"
+          placeholder="例如：production, v2"
           className="h-8 text-xs"
           disabled={disabled}
         />
       </FieldLabel>
-      <FieldLabel label="Min traces per session">
+      <FieldLabel label="每个 Session 最少 Trace 数">
         <Input
           type="number"
           min={1}
           value={value.min_trace_count}
           onChange={(e) => set("min_trace_count", e.target.value)}
-          placeholder="e.g. 3"
+          placeholder="例如：3"
           className="h-8 text-xs"
           disabled={disabled}
         />

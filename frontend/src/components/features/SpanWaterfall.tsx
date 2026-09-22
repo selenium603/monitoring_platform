@@ -75,7 +75,7 @@ export function SpanWaterfall({ trace, overlayTargetRef }: SpanWaterfallProps) {
   if (trace.spans.length === 0) {
     return (
       <div className="text-xs text-text-muted font-mono py-4 text-center border border-border">
-        No spans recorded
+        暂无 Span 记录
       </div>
     );
   }
@@ -97,7 +97,7 @@ export function SpanWaterfall({ trace, overlayTargetRef }: SpanWaterfallProps) {
       <div className="md:w-[38%] w-full max-h-[50vh] md:max-h-none overflow-y-auto overflow-x-hidden border-b md:border-b-0 md:border-r border-border flex-shrink-0 bg-surface">
         <div className="sticky top-0 z-10 bg-surface px-3 py-1.5 border-b border-border">
           <span className="text-[10px] font-mono text-text-muted uppercase tracking-wider">
-            Spans · {trace.spans.length}
+            Span · {trace.spans.length}
           </span>
         </div>
         <WaterfallTree
@@ -118,11 +118,7 @@ export function SpanWaterfall({ trace, overlayTargetRef }: SpanWaterfallProps) {
           type="button"
           onClick={toggleExpanded}
           aria-expanded={isExpanded}
-          title={
-            isExpanded
-              ? "Collapse (Esc)"
-              : "Expand over the trace metadata for more room"
-          }
+          title={isExpanded ? "收起（Esc）" : "展开面板以查看更多 Trace 信息"}
           className="absolute top-2 right-2 z-20 inline-flex items-center justify-center h-6 w-6 border border-border bg-surface text-text-muted hover:text-text transition-colors"
         >
           {isExpanded ? (
@@ -131,7 +127,7 @@ export function SpanWaterfall({ trace, overlayTargetRef }: SpanWaterfallProps) {
             <Maximize2 className="h-3 w-3" />
           )}
           <span className="sr-only">
-            {isExpanded ? "Collapse span panel" : "Expand span panel"}
+            {isExpanded ? "收起 Span 面板" : "展开 Span 面板"}
           </span>
         </button>
       )}

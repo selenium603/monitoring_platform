@@ -4,6 +4,7 @@ import type { MonitorResponse } from "@/lib/api/types";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Badge } from "@/components/ui/Badge";
 import { formatRelativeTime } from "@/lib/utils/format";
+import { cadenceLabel, labelFor, metricLabel } from "@/lib/utils/labels";
 
 interface MonitorTableProps {
   monitors: MonitorResponse[];
@@ -17,28 +18,28 @@ export function MonitorTable({ monitors, onSelect }: MonitorTableProps) {
         <thead className="sticky top-0 z-10 bg-surface-hi">
           <tr className="border-b border-border">
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Name / ID
+              名称 / ID
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Status
+              状态
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Target
+              目标
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Cadence
+              周期
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Metrics
+              指标
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Sampling
+              采样比例
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Last run
+              上次运行
             </th>
             <th className="text-left px-3 py-2 text-text-muted font-normal">
-              Next run
+              下次运行
             </th>
           </tr>
         </thead>
@@ -58,18 +59,20 @@ export function MonitorTable({ monitors, onSelect }: MonitorTableProps) {
               <td className="px-3 py-2">
                 <StatusBadge status={m.status} />
               </td>
-              <td className="px-3 py-2 text-text-dim">{m.target_type}</td>
+              <td className="px-3 py-2 text-text-dim">
+                {labelFor(m.target_type)}
+              </td>
               <td
                 className="px-3 py-2 text-text-dim max-w-[180px] truncate"
                 title={m.cadence}
               >
-                {formatCadence(m.cadence)}
+                {cadenceLabel(m.cadence)}
               </td>
               <td className="px-3 py-2">
                 <div className="flex gap-1 flex-wrap">
                   {m.metric_names.slice(0, 3).map((name) => (
                     <Badge key={name} variant="info">
-                      {name}
+                      {metricLabel(name)}
                     </Badge>
                   ))}
                   {m.metric_names.length > 3 && (
@@ -108,21 +111,4 @@ function formatSamplingRate(rate: number): string {
   if (rate == null || Number.isNaN(rate)) return "—";
   if (rate >= 1) return "100%";
   return `${Math.round(rate * 100)}%`;
-}
-
-function formatCadence(cadence: string): string {
-  if (!cadence) return "—";
-  if (cadence.startsWith("cron:")) {
-    return `cron: ${cadence.slice("cron:".length).trim()}`;
-  }
-  switch (cadence) {
-    case "every_6h":
-      return "every 6h";
-    case "daily":
-      return "daily";
-    case "weekly":
-      return "weekly";
-    default:
-      return cadence;
-  }
 }

@@ -40,6 +40,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { extractErrorMessage } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
 import { cn } from "@/lib/utils/cn";
+import { labelFor, metricLabel } from "@/lib/utils/labels";
 
 const DEFAULT_MODEL_VALUE = "__default__";
 const ANY_STATUS_VALUE = "__any__";
@@ -305,7 +306,7 @@ export function MonitorFormSidebar({
         response = await createMonitor(body);
       }
       toast({
-        title: isEdit ? "Monitor updated" : "Monitor created",
+        title: isEdit ? "监控已更新" : "监控已创建",
         variant: "success",
       });
       // Invalidate list + detail so viewers pick up the change immediately.
@@ -340,7 +341,7 @@ export function MonitorFormSidebar({
       >
         <div className="flex items-center justify-between h-12 px-4 border-b border-border flex-shrink-0">
           <h2 className="text-xs font-mono text-text-muted uppercase tracking-wider truncate">
-            {isEdit ? `Edit monitor` : "Create monitor"}
+            {isEdit ? "编辑评估监控" : "创建评估监控"}
           </h2>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-3.5 w-3.5" />
@@ -350,12 +351,12 @@ export function MonitorFormSidebar({
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="px-4 py-3 border-b border-border">
             <label className="block text-xs font-mono text-text-primary uppercase tracking-wide mb-1.5">
-              Name <RequiredDot />
+              名称 <RequiredDot />
             </label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Daily prod eval"
+              placeholder="例如：每日生产评估"
               className="h-8 text-xs"
               disabled={submitting}
             />
@@ -363,13 +364,13 @@ export function MonitorFormSidebar({
 
           <div className="px-4 py-3 border-b border-border">
             <label className="block text-xs font-mono text-text-primary uppercase tracking-wide mb-1.5">
-              Target type <RequiredDot />
+              目标类型 <RequiredDot />
             </label>
             {isEdit ? (
               <div className="text-xs font-mono text-text">
                 {targetType}{" "}
                 <span className="text-text-muted">
-                  (target cannot be changed after creation)
+                  （创建后无法修改目标类型）
                 </span>
               </div>
             ) : (
@@ -391,7 +392,7 @@ export function MonitorFormSidebar({
                       disabled={submitting}
                       className="accent-primary"
                     />
-                    {t}
+                    {t === "TRACE" ? "Trace" : "Session"}
                   </label>
                 ))}
               </div>
@@ -401,7 +402,7 @@ export function MonitorFormSidebar({
           <div className="px-4 py-3 border-b border-border">
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-mono text-text-primary uppercase tracking-wide">
-                Metrics <RequiredDot />
+                指标 <RequiredDot />
               </label>
               <span className="text-[10px] font-mono text-text-muted">
                 {selectedMetrics.size}/{metrics.length}
@@ -409,7 +410,7 @@ export function MonitorFormSidebar({
             </div>
             {metricsQuery.isPending ? (
               <p className="text-[11px] font-mono text-text-muted py-2">
-                Loading metrics…
+                正在加载指标…
               </p>
             ) : metricsQuery.error ? (
               <p className="text-[11px] font-mono text-error py-2">
@@ -417,7 +418,7 @@ export function MonitorFormSidebar({
               </p>
             ) : metrics.length === 0 ? (
               <p className="text-[11px] font-mono text-text-muted py-2">
-                No metrics available
+                暂无可用指标
               </p>
             ) : (
               <div className="max-h-64 overflow-y-auto border border-border/40 divide-y divide-border/40">
@@ -440,7 +441,7 @@ export function MonitorFormSidebar({
                       />
                       <div className="flex-1 min-w-0">
                         <span className="text-xs font-mono text-text truncate block">
-                          {metric.name}
+                          {metricLabel(metric.name)}
                         </span>
                         {metric.description && (
                           <p className="mt-0.5 text-[11px] font-mono text-text-muted line-clamp-2">
@@ -458,12 +459,12 @@ export function MonitorFormSidebar({
           <div className="px-4 py-3 border-b border-border">
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs font-mono text-text-primary uppercase tracking-wide">
-                Filters
+                筛选条件
               </label>
               <span className="text-[10px] font-mono text-text-muted">
                 {activeFilterCount === 0
-                  ? "all matching"
-                  : `${activeFilterCount} active`}
+                  ? "匹配全部"
+                  : `${activeFilterCount} 项已启用`}
               </span>
             </div>
             {targetType === "TRACE" ? (
@@ -483,7 +484,7 @@ export function MonitorFormSidebar({
 
           <div className="px-4 py-3 border-b border-border">
             <label className="block text-xs font-mono text-text-primary uppercase tracking-wide mb-1.5">
-              Cadence <RequiredDot />
+              运行周期 <RequiredDot />
             </label>
             <Select
               value={cadenceKind}
@@ -495,12 +496,12 @@ export function MonitorFormSidebar({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={MonitorCadence.every_6h}>
-                  Every 6 hours
+                  每 6 小时
                 </SelectItem>
-                <SelectItem value={MonitorCadence.daily}>Daily</SelectItem>
-                <SelectItem value={MonitorCadence.weekly}>Weekly</SelectItem>
+                <SelectItem value={MonitorCadence.daily}>每天</SelectItem>
+                <SelectItem value={MonitorCadence.weekly}>每周</SelectItem>
                 <SelectItem value={MonitorCadence.custom}>
-                  Custom (cron)
+                  自定义（cron）
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -520,8 +521,8 @@ export function MonitorFormSidebar({
                   )}
                 >
                   {cronValid
-                    ? "5 space-separated fields: minute hour day-of-month month day-of-week"
-                    : "Cron must have exactly 5 space-separated fields."}
+                    ? "请输入 5 个以空格分隔的字段：分钟、小时、日、月、星期"
+                    : "Cron 必须包含恰好 5 个以空格分隔的字段。"}
                 </p>
               </div>
             )}
@@ -530,7 +531,7 @@ export function MonitorFormSidebar({
           <div className="px-4 py-3 border-b border-border">
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-mono text-text-primary uppercase tracking-wide">
-                Sampling rate
+                采样比例
               </label>
               <span className="text-[11px] font-mono text-text">
                 {formatSamplingRate(samplingRate)}
@@ -547,15 +548,14 @@ export function MonitorFormSidebar({
               className="w-full accent-primary"
             />
             <p className="mt-1 text-[10px] font-mono text-text-muted">
-              Fraction of matching{" "}
-              {targetType === "TRACE" ? "traces" : "sessions"} to evaluate on
-              each run.
+              每次运行将按比例评估匹配的{" "}
+              {targetType === "TRACE" ? "Trace" : "Session"}。
             </p>
           </div>
 
           <div className="px-4 py-3 border-b border-border">
             <label className="block text-xs font-mono text-text-primary uppercase tracking-wide mb-1.5">
-              Model
+              模型
             </label>
             <Select
               value={selectedModel}
@@ -563,10 +563,10 @@ export function MonitorFormSidebar({
               disabled={submitting || providersQuery.isPending}
             >
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Default" />
+                <SelectValue placeholder="默认" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={DEFAULT_MODEL_VALUE}>Default</SelectItem>
+                <SelectItem value={DEFAULT_MODEL_VALUE}>默认</SelectItem>
                 {providers.map((p) => (
                   <SelectGroup key={p.key}>
                     <SelectLabel>{p.name}</SelectLabel>
@@ -594,13 +594,12 @@ export function MonitorFormSidebar({
                 disabled={submitting}
               />
               <span className="text-xs font-mono text-text-primary">
-                Skip run if no new data since last run
+                自上次运行后无新数据时跳过
               </span>
             </label>
             <p className="mt-1 text-[10px] font-mono text-text-muted pl-6">
-              When enabled, the scheduled run is skipped if no new{" "}
-              {targetType === "TRACE" ? "traces" : "sessions"} matching the
-              filters have appeared since the previous run.
+              开启后，如果自上次运行以来没有出现符合条件的新{" "}
+              {targetType === "TRACE" ? "Trace" : "Session"}，计划运行将被跳过。
             </p>
           </div>
 
@@ -614,7 +613,7 @@ export function MonitorFormSidebar({
                   disabled={submitting}
                 />
                 <span className="text-xs font-mono text-text-primary uppercase tracking-wide">
-                  Customize signal weights
+                  自定义信号权重
                 </span>
               </label>
               {customizeWeights && (
@@ -659,7 +658,7 @@ export function MonitorFormSidebar({
             onClick={onClose}
             disabled={submitting}
           >
-            Cancel
+            取消
           </Button>
           <Button
             variant="primary"
@@ -674,11 +673,11 @@ export function MonitorFormSidebar({
             )}
             {submitting
               ? isEdit
-                ? "Saving…"
-                : "Creating…"
+                ? "保存中…"
+                : "创建中…"
               : isEdit
-                ? "Save"
-                : "Create monitor"}
+                ? "保存"
+                : "创建监控"}
           </Button>
         </div>
       </div>
@@ -707,45 +706,45 @@ function TraceFilterFields({
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <FieldLabel label="Started after">
+        <FieldLabel label="开始时间之后">
           <DateTimePicker
             value={value.date_from}
             onChange={(v) => set("date_from", v)}
-            placeholder="After..."
+            placeholder="之后…"
           />
         </FieldLabel>
-        <FieldLabel label="Started before">
+        <FieldLabel label="开始时间之前">
           <DateTimePicker
             value={value.date_to}
             onChange={(v) => set("date_to", v)}
-            placeholder="Before..."
+            placeholder="之前…"
           />
         </FieldLabel>
       </div>
-      <FieldLabel label="Trace status">
+      <FieldLabel label="Trace 状态">
         <Select
           value={value.status}
           onValueChange={(v) => set("status", v)}
           disabled={disabled}
         >
           <SelectTrigger className="h-8 text-xs">
-            <SelectValue placeholder="Any" />
+            <SelectValue placeholder="任意" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY_STATUS_VALUE}>Any</SelectItem>
+            <SelectItem value={ANY_STATUS_VALUE}>任意</SelectItem>
             {Object.values(TraceStatus).map((s) => (
               <SelectItem key={s} value={s}>
-                {s}
+                {labelFor(s)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </FieldLabel>
-      <FieldLabel label="Trace name contains">
+      <FieldLabel label="Trace 名称包含">
         <Input
           value={value.name}
           onChange={(e) => set("name", e.target.value)}
-          placeholder="substring match"
+          placeholder="输入名称片段"
           className="h-8 text-xs"
           disabled={disabled}
         />
@@ -755,26 +754,26 @@ function TraceFilterFields({
           <Input
             value={value.session_id}
             onChange={(e) => set("session_id", e.target.value)}
-            placeholder="exact match"
+            placeholder="精确匹配"
             className="h-8 text-xs"
             disabled={disabled}
           />
         </FieldLabel>
-        <FieldLabel label="User ID">
+        <FieldLabel label="用户 ID">
           <Input
             value={value.user_id}
             onChange={(e) => set("user_id", e.target.value)}
-            placeholder="exact match"
+            placeholder="精确匹配"
             className="h-8 text-xs"
             disabled={disabled}
           />
         </FieldLabel>
       </div>
-      <FieldLabel label="Tags (comma-separated)">
+      <FieldLabel label="标签（英文逗号分隔）">
         <Input
           value={value.tags}
           onChange={(e) => set("tags", e.target.value)}
-          placeholder="e.g. production, v2"
+          placeholder="例如：production, v2"
           className="h-8 text-xs"
           disabled={disabled}
         />
@@ -800,64 +799,64 @@ function SessionFilterFields({
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <FieldLabel label="Started after">
+        <FieldLabel label="开始时间之后">
           <DateTimePicker
             value={value.date_from}
             onChange={(v) => set("date_from", v)}
-            placeholder="After..."
+            placeholder="之后…"
           />
         </FieldLabel>
-        <FieldLabel label="Started before">
+        <FieldLabel label="开始时间之前">
           <DateTimePicker
             value={value.date_to}
             onChange={(v) => set("date_to", v)}
-            placeholder="Before..."
+            placeholder="之前…"
           />
         </FieldLabel>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <FieldLabel label="User ID">
+        <FieldLabel label="用户 ID">
           <Input
             value={value.user_id}
             onChange={(e) => set("user_id", e.target.value)}
-            placeholder="exact match"
+            placeholder="精确匹配"
             className="h-8 text-xs"
             disabled={disabled}
           />
         </FieldLabel>
-        <FieldLabel label="Has error">
+        <FieldLabel label="包含错误">
           <Select
             value={value.has_error}
             onValueChange={(v) => set("has_error", v)}
             disabled={disabled}
           >
             <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="Any" />
+              <SelectValue placeholder="任意" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ANY_HAS_ERROR_VALUE}>Any</SelectItem>
-              <SelectItem value="true">With errors</SelectItem>
-              <SelectItem value="false">Without errors</SelectItem>
+              <SelectItem value={ANY_HAS_ERROR_VALUE}>任意</SelectItem>
+              <SelectItem value="true">有错误</SelectItem>
+              <SelectItem value="false">无错误</SelectItem>
             </SelectContent>
           </Select>
         </FieldLabel>
       </div>
-      <FieldLabel label="Tags (comma-separated)">
+      <FieldLabel label="标签（英文逗号分隔）">
         <Input
           value={value.tags}
           onChange={(e) => set("tags", e.target.value)}
-          placeholder="e.g. production, v2"
+          placeholder="例如：production, v2"
           className="h-8 text-xs"
           disabled={disabled}
         />
       </FieldLabel>
-      <FieldLabel label="Min traces per session">
+      <FieldLabel label="每个 Session 最少 Trace 数">
         <Input
           type="number"
           min={1}
           value={value.min_trace_count}
           onChange={(e) => set("min_trace_count", e.target.value)}
-          placeholder="e.g. 3"
+          placeholder="例如：3"
           className="h-8 text-xs"
           disabled={disabled}
         />
